@@ -70,7 +70,7 @@ test.describe("corporate tab guides, in Korean", () => {
     const guide = lowerPanel(page).getByTestId("corporate-guide-diagnostics");
     // P4 replaced the fixed Peer A-C with same-sector watchlist companies (plan 2026-11-02 §6.5).
     await expect(guide).toContainText("회색 점은 같은 섹터의 관심종목(최대 4개)이며, 각 종목의 실제 지표입니다.");
-    await expect(guide).toContainText("Industry는 이 기업 자체의 비레버리지 베타입니다(업종 평균 아님).");
+    await expect(guide).toContainText("β_U는 이 기업 자체의 비레버리지 베타입니다(업종 평균 아님).");
   });
 
   test("comparison column names read in Korean and each shows its definition on hover", async ({ page }) => {
@@ -112,14 +112,41 @@ test.describe("example labels and the value matrix quadrants", () => {
     await table.getByRole("button", { name: `Edit ${label}` }).click();
   }
 
-  test("each diagnostic chart with fixed example values carries an Example badge that says what is fixed", async ({ page }) => {
+  test("no diagnostic chart carries an example badge: the hurdle and beta charts show the company's own values", async ({ page }) => {
     await gotoCorporateEn(page);
     await openTab(page, "Core Diagnostics");
     const panel = lowerPanel(page);
-    await expect(panel.getByTestId("example-badge-regions")).toHaveAttribute("title", /regional bars and line are fixed example indicators/);
-    await expect(panel.getByTestId("example-badge-beta")).toHaveAttribute("title", /Operating bar is an example/);
+    await expect(panel.getByTestId("example-badge-regions")).toHaveCount(0);
+    await expect(panel.getByTestId("example-badge-beta")).toHaveCount(0);
     // The matrix has no example points since P4: its comparison points are real companies.
     await expect(panel.getByTestId("example-badge-peers")).toHaveCount(0);
+  });
+
+  test("the hurdle chart shows the company's Ke components from the mocked data, with no regional rows", async ({ page }) => {
+    await gotoCorporateEn(page);
+    await openTab(page, "Core Diagnostics");
+    const hurdle = lowerPanel(page).locator("div.p-5", { has: page.getByRole("heading", { name: "Hurdle Rate Decomposition" }) }).first();
+    await expect(hurdle.locator(".recharts-bar-rectangle").first()).toBeVisible({ timeout: 30_000 });
+    await expect(hurdle.locator("text").filter({ hasText: /^(Risk-free|Beta x ERP|CRP)$/ })).toHaveText(["Risk-free", "Beta x ERP", "CRP"]);
+    await expect(hurdle.getByRole("button", { name: "Risk-free: 4.2%" })).toBeVisible();
+    await expect(hurdle.getByRole("button", { name: "Beta x ERP: 6.8%" })).toBeVisible();
+    await expect(hurdle.getByRole("button", { name: "CRP: 0.8%" })).toBeVisible();
+    await expect(hurdle).toContainText("Total (sum of the three): 11.8%");
+    await expect(hurdle).not.toContainText(/\bEU\b|Emerging/);
+  });
+
+  test("the beta chart has exactly two bars, unlevered and levered beta, with the mocked values", async ({ page }) => {
+    await gotoCorporateEn(page);
+    await openTab(page, "Core Diagnostics");
+    const beta = lowerPanel(page).locator("div.p-5", { has: page.getByText("Bottom-up Beta", { exact: true }) }).first();
+    await expect(beta.locator(".recharts-bar-rectangle").first()).toBeVisible({ timeout: 30_000 });
+    await expect(beta.locator("text").filter({ hasText: /^β_[UL] / })).toHaveText(["β_U (unlevered)", "β_L (levered)"]);
+    const bars = beta.locator(".recharts-bar-rectangle");
+    await expect(bars).toHaveCount(2);
+    await bars.nth(0).hover();
+    await expect(beta.locator(".recharts-tooltip-wrapper")).toContainText("1.05");
+    await bars.nth(1).hover();
+    await expect(beta.locator(".recharts-tooltip-wrapper")).toContainText("1.23");
   });
 
   const cases = [

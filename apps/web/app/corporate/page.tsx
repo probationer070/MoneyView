@@ -48,7 +48,6 @@ import {
   IMPLIED_ERP_DIVIDEND_YIELD,
   IMPLIED_ERP_FALLBACK_INDEX_LEVEL,
   IMPLIED_ERP_FIVE_YEAR_GROWTH,
-  KOREA_COUNTRY_RISK_PREMIUM,
   METRIC_HISTORY_CACHE_KEY,
   PRICE_HISTORY_CACHE_KEY,
   QUARTERLY_STATEMENTS_CACHE_KEY,
@@ -822,18 +821,10 @@ export default function CorporateAnalysisPage() {
     { name: "CRP", value: assumptions.crp, fill: "var(--ink)" },
   ];
 
-  const regionalHurdle = [
-    { region: "US", rf: RISK_FREE_RATE, erp: impliedErp, defaultSpread: 0.0, riskMultiplier: 0.0, crp: 0.0, revenue: 46 },
-    { region: "EU", rf: RISK_FREE_RATE + 0.2, erp: impliedErp + 0.4, defaultSpread: 0.3, riskMultiplier: 1.0, crp: 0.3, revenue: 22 },
-    { region: "Korea", rf: RISK_FREE_RATE + 0.4, erp: impliedErp + 1.2, defaultSpread: KOREA_COUNTRY_RISK_PREMIUM, riskMultiplier: 1.0, crp: KOREA_COUNTRY_RISK_PREMIUM, revenue: 12 },
-    { region: "Emerging", rf: RISK_FREE_RATE + 0.9, erp: impliedErp + 2.1, defaultSpread: KOREA_COUNTRY_RISK_PREMIUM, riskMultiplier: 1.35, crp: Number((KOREA_COUNTRY_RISK_PREMIUM * 1.35).toFixed(1)), revenue: 20 },
-  ];
-
+  // Two real betas (plan 2026-11-02 §3 V5, D4(a)): unlevered β_U and the levered β_L inside Ke.
   const betaTreemapProxy = [
-    { name: "Industry", beta: Number(assumptions.unleveredBeta.toFixed(1)), size: 42 },
-    // An example, not an operating beta: plan 2026-11-02 §3 V5 (labelled until D4 replaces the bars).
-    { name: "Operating", beta: Number(clamp(0.75 + assumptions.reinvestment / 100, 0.6, 1.8).toFixed(1)), size: 28, illustrative: true },
-    { name: "Financial", beta: Number(derived.leveredBeta.toFixed(2)), size: 30 },
+    { name: "β_U (unlevered)", beta: Number(assumptions.unleveredBeta.toFixed(2)) },
+    { name: "β_L (levered)", beta: Number(derived.leveredBeta.toFixed(2)) },
   ];
 
   const companyName = activeCompany.name;
@@ -865,7 +856,6 @@ export default function CorporateAnalysisPage() {
     impliedErp,
     impliedErpInputs,
     dcfData,
-    regionalHurdle,
     hurdleBars,
     betaTreemapProxy,
     valueMatrix,
@@ -916,8 +906,6 @@ export default function CorporateAnalysisPage() {
     impliedMarketReturn,
     impliedErp,
     hasSp500Data: Boolean(sp500Query.data),
-    regionalHurdle,
-    betaTreemapProxy,
     valueMatrix,
   });
 
@@ -1005,7 +993,6 @@ export default function CorporateAnalysisPage() {
             <CorporateDiagnosticsSection
               companyName={companyName}
               hurdleBars={hurdleBars}
-              regionalHurdle={regionalHurdle}
               betaTreemapProxy={betaTreemapProxy}
               valueMatrix={valueMatrix}
               matrixPeerTickers={matrixPeerTickers}

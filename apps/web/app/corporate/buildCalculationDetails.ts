@@ -61,22 +61,6 @@ interface ValueMatrixPoint {
   fcff: number;
 }
 
-interface RegionalHurdlePoint {
-  region: string;
-  rf: number;
-  erp: number;
-  defaultSpread: number;
-  riskMultiplier: number;
-  crp: number;
-  revenue: number;
-}
-
-interface BetaTreemapPoint {
-  name: string;
-  beta: number;
-  size: number;
-}
-
 interface BuildCalculationDetailsArgs {
   companyName: string;
   assumptions: CorporateAssumptionsSnapshot;
@@ -98,8 +82,6 @@ interface BuildCalculationDetailsArgs {
   impliedMarketReturn: number;
   impliedErp: number;
   hasSp500Data: boolean;
-  regionalHurdle: RegionalHurdlePoint[];
-  betaTreemapProxy: BetaTreemapPoint[];
   valueMatrix: ValueMatrixPoint[];
 }
 
@@ -123,8 +105,6 @@ export function buildCalculationDetails({
   impliedMarketReturn,
   impliedErp,
   hasSp500Data,
-  regionalHurdle,
-  betaTreemapProxy,
   valueMatrix,
 }: BuildCalculationDetailsArgs): Record<CalculationDetailKey, CalculationDetail> {
   // Every fair-value and upside string below is one of these two, never the raw field. When
@@ -606,7 +586,7 @@ export function buildCalculationDetails({
     },
     hurdleDecomposition: {
       title: `${companyName} Hurdle Rate Decomposition`,
-      timeHorizon: "Fixed model inputs: risk-free rate 4.2%, and an implied ERP solved from a fixed cash yield and growth path. The regional indicators are fixed examples, the same for every company. The company's own CRP is set by its reporting currency.",
+      timeHorizon: "Fixed model inputs: risk-free rate 4.2%, and an implied ERP solved from a fixed cash yield and growth path. The company's own CRP is set by its reporting currency.",
       summary: [
         { label: "Risk-free Rate", value: pct(riskFreeRate), source: "FRED / macro assumption" },
         { label: "Expected Market Return (IRR)", value: pct(impliedMarketReturn), source: "Fixed model: first-year cash yield and a 5-year growth path, both constants. The cash flows scale with the index, so the index level cancels out and this does not move with the market" },
@@ -615,25 +595,20 @@ export function buildCalculationDetails({
         { label: "CRP", value: pct(koreaCountryRiskPremium), source: "By reporting currency: USD, CAD, EUR 0%; otherwise 0.8%" },
         { label: "Bottom-up Ke", value: pct(derived.bottomUpKe), source: "Realtime hurdle-rate model" },
       ],
-      components: regionalHurdle.map((region) => ({
-        label: region.region,
-        value: `RF ${pct(region.rf)}, implied ERP ${pct2(region.erp)}, spread ${pct(region.defaultSpread)}, multiplier ${numberText(region.riskMultiplier)}, CRP ${pct(region.crp)}, example weight ${numberText(region.revenue)}`,
-        source: region.region === "US"
-          ? "US indicator uses mature-market CRP of 0.0%; market risk is carried through implied ERP."
-          : region.region === "Korea"
-            ? "Korea indicator applies the fixed Korea country risk premium."
-            : `${region.region} indicator applies the regional default spread and risk multiplier proxy.`,
-        // Plan 2026-11-02 §3 V4: fixed adders and weights, not this company's regional revenue.
-      })).map((row) => ({ ...row, source: `Fixed example, the same for every company. ${row.source}` })),
-      formula: "Bottom-up Ke = risk-free rate + levered beta x ERP (5.5%, as in WACC) + CRP. The implied ERP and the regional indicators are references, not inputs",
+      components: [
+        { label: "Risk-free Rate", value: pct(riskFreeRate), source: "FRED / macro assumption" },
+        { label: "Beta x ERP", value: pct(derived.leveredBeta * equityRiskPremium), source: `Levered beta ${numberText2(derived.leveredBeta)} x ERP ${pct(equityRiskPremium)}` },
+        { label: "CRP", value: pct(koreaCountryRiskPremium), source: "Country risk premium by reporting currency: USD, CAD, EUR 0%; otherwise 0.8%" },
+      ],
+      formula: "Bottom-up Ke = risk-free rate + levered beta x ERP (5.5%, as in WACC) + CRP. The implied ERP is a reference, not an input",
       result: pct(derived.bottomUpKe),
-      sourcing: regionalHurdle.map((region) => ({
-        label: region.region,
-        value: `RF ${pct(region.rf)}, implied ERP ${pct2(region.erp)}, CRP ${pct(region.crp)}`,
-        source: region.region === "Korea" ? "Fixed Korea CRP assumption" : "Regional hurdle-rate indicator",
-      })),
+      sourcing: [
+        { label: "Levered beta", value: numberText2(derived.leveredBeta), source: derived.keFromWacc ? "The beta inside the WACC (Yahoo regression beta)" : "Unlevered beta re-levered with the current debt ratio: βU x [1 + (1 - t) x D/E]" },
+        { label: "ERP", value: pct(equityRiskPremium), source: "Model policy ERP, the same as in the WACC; the implied ERP is a reference only" },
+        { label: "CRP", value: pct(koreaCountryRiskPremium), source: "Country risk premium by reporting currency" },
+      ],
       simulation: [
-        { label: "1", value: "Show US, EU, Korea, and emerging-market indicators", source: "Regional hurdle-rate indicator set" },
+        { label: "1", value: "Read the three components: risk-free rate, levered beta x ERP, CRP", source: "Hurdle components" },
         { label: "2", value: `ERP = model policy ${pct(equityRiskPremium)} (implied ERP ${pct2(impliedErp)} shown for reference)`, source: pct(equityRiskPremium) },
         { label: "3", value: `Levered beta premium = ${numberText2(derived.leveredBeta)} x ${pct(equityRiskPremium)}`, source: pct(derived.leveredBeta * equityRiskPremium) },
         { label: "4", value: `${pct(riskFreeRate)} + ${pct(derived.leveredBeta * equityRiskPremium)} + ${pct(koreaCountryRiskPremium)}`, source: pct(derived.bottomUpKe) },
@@ -643,27 +618,28 @@ export function buildCalculationDetails({
       title: `${companyName} Bottom-up Beta`,
       timeHorizon: "5-year beta convention for business risk, with the current capital structure.",
       summary: [
-        { label: "Unlevered Beta", value: numberText(assumptions.unleveredBeta), source: sourceLabel },
+        { label: "Unlevered Beta", value: numberText2(assumptions.unleveredBeta), source: sourceLabel },
         { label: "Debt / Equity", value: numberText(derived.debtToEquity), source: "Debt ratio conversion" },
         { label: "Financial Beta", value: numberText2(derived.leveredBeta), source: derived.keFromWacc ? "The beta inside the WACC" : "Hamada formula" },
         { label: "Current Debt Ratio", value: pct(assumptions.debtRatio), source: "Latest statement debt / (debt + equity)" },
       ],
       components: [
-        ...betaTreemapProxy.map((item) => ({
-          label: `${item.name} beta`,
-          value: item.name === "Financial" ? numberText2(item.beta) : numberText(item.beta),
-          source: item.name === "Industry"
-            ? `This company's own unlevered beta (its regression beta de-levered), not an industry average. ${betaInterpretation(item.beta)}`
-            : item.name === "Operating"
-              ? `Example only: 0.75 + reinvestment rate / 100, clamped to 0.6-1.8. Not an operating beta.`
-              : `The levered beta, the one inside the WACC. ${betaInterpretation(item.beta)}`,
-        })),
+        {
+          label: "β_U (unlevered)",
+          value: numberText2(assumptions.unleveredBeta),
+          source: `This company's own Yahoo regression beta, de-levered by the backend with the latest statement D/E and the tax rate; not an industry average. ${betaInterpretation(assumptions.unleveredBeta)}`,
+        },
+        {
+          label: "β_L (levered)",
+          value: numberText2(derived.leveredBeta),
+          source: `${derived.keFromWacc ? "The levered beta inside the WACC, the one in Ke" : "β_U re-levered with the current debt ratio, the one in Ke"}. ${betaInterpretation(derived.leveredBeta)}`,
+        },
       ],
       formula: "Levered Beta = betaU x [1 + (1 - tax) x D/E]",
       result: `${numberText2(derived.leveredBeta)} beta; current WACC ${pct(assumptions.wacc)}`,
       sourcing: [
-        { label: "Industry bar (unlevered beta)", value: numberText(assumptions.unleveredBeta), source: "This company's Yahoo beta de-levered with averaged annual statement D/E and tax rate; not an industry average" },
-        { label: "Financial Beta", value: numberText2(derived.leveredBeta), source: "The levered beta inside the WACC: business risk plus the leverage risk of debt" },
+        { label: "β_U (unlevered)", value: numberText2(assumptions.unleveredBeta), source: "Yahoo regression beta de-levered: β_U = β / [1 + (1 - t) x D/E], with the latest statement D/E and the tax rate; a saved or default value when Yahoo metrics are not loaded" },
+        { label: "β_L (levered)", value: numberText2(derived.leveredBeta), source: derived.keFromWacc ? "The levered beta inside the WACC: business risk plus the leverage risk of debt" : "β_U x [1 + (1 - t) x D/E] at the current debt ratio" },
         { label: "Beta convention", value: betaInterpretation(derived.leveredBeta), source: "Beta 1.0 = average market risk; beta above/below 1.0 means proportionally higher/lower volatility" },
         { label: "Debt Ratio", value: pct(assumptions.debtRatio), source: "Yahoo annual balance sheet debt / (debt + equity), averaged from 2021 onward" },
         { label: "Tax Rate", value: pct(taxRate * 100), source: "Corporate tax assumption" },

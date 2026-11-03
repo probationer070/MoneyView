@@ -1,23 +1,25 @@
 "use client";
 
-import { Bar, CartesianGrid, ComposedChart, Line, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
+import { Bar, BarChart, Cell, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { useT } from "@/lib/i18n/locale";
-import { ExampleBadge } from "./ExampleBadge";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 import { GRID_STYLE, fmtPctTick, withAxisProps, withCategoryAxisProps, withTooltipProps } from "@/lib/chartConfig";
-import { type DetailKey, type HurdleBarPoint, type RegionalHurdlePoint, pct, pct2 } from "./shared";
+import { type DetailKey, type HurdleBarPoint, pct } from "./shared";
 
+/**
+ * The company's own Ke components (plan 2026-11-02 §3 V4, D4(a)): risk-free rate, levered beta x ERP and CRP.
+ * The fixed regional bars were examples for every company and are gone.
+ */
 export function HurdleRateDecompositionGraph({
   hurdleBars,
-  regionalHurdle,
   onOpenDetail,
 }: {
   hurdleBars: HurdleBarPoint[];
-  regionalHurdle: RegionalHurdlePoint[];
   onOpenDetail: (key: DetailKey) => void;
 }) {
   const t = useT();
+  const componentSum = hurdleBars.reduce((total, item) => total + item.value, 0);
   return (
     <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-5">
       <div className="min-w-0">
@@ -33,20 +35,21 @@ export function HurdleRateDecompositionGraph({
               description={t("corporate.charts.hurdleHelp")}
             />
           </button>
-          <ExampleBadge testId="example-badge-regions" why={t("corporate.charts.exampleRegions")} />
         </div>
       </div>
       <div className="h-56 min-h-56 min-w-0">
         <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>
-          <ComposedChart data={regionalHurdle} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
+          <BarChart data={hurdleBars} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
             <CartesianGrid {...GRID_STYLE} />
-            <XAxis dataKey="region" {...withCategoryAxisProps()} />
+            <XAxis dataKey="name" {...withCategoryAxisProps()} />
             <YAxis {...withAxisProps({ tickFormatter: (value: number | string) => fmtPctTick(Number(value), 0) })} />
-            <ZAxis dataKey="revenue" range={[80, 520]} />
-            <Tooltip {...withTooltipProps()} formatter={(value, name) => (name === "Implied ERP" ? pct2(Number(value)) : pct(Number(value)))} />
-            <Bar dataKey="crp" name="CRP" fill="var(--ink)" />
-            <Line dataKey="erp" name="Implied ERP" stroke="var(--chart-1)" strokeWidth={3} dot={{ r: 4 }} />
-          </ComposedChart>
+            <Tooltip {...withTooltipProps()} formatter={(value) => pct(Number(value))} />
+            <Bar dataKey="value" name="Component">
+              {hurdleBars.map((item) => (
+                <Cell key={item.name} fill={item.fill} />
+              ))}
+            </Bar>
+          </BarChart>
         </ResponsiveChart>
       </div>
       <div className="type-small mt-2 grid grid-cols-1 gap-2 text-[var(--ink-muted)] sm:grid-cols-2 lg:grid-cols-3">
@@ -67,6 +70,7 @@ export function HurdleRateDecompositionGraph({
           </button>
         ))}
       </div>
+      <p className="type-small mt-2 text-[var(--ink)]">Total (sum of the three): {pct(componentSum)}</p>
     </div>
   );
 }

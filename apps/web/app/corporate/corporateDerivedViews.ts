@@ -161,7 +161,6 @@ export function buildRawDatasetRows({
   impliedErp,
   impliedErpInputs,
   dcfData,
-  regionalHurdle,
   hurdleBars,
   betaTreemapProxy,
   valueMatrix,
@@ -172,7 +171,6 @@ export function buildRawDatasetRows({
   impliedErp: number;
   impliedErpInputs: ImpliedErpInputs;
   dcfData: DCFResult | null;
-  regionalHurdle: ChartRecord[];
   hurdleBars: ChartRecord[];
   betaTreemapProxy: ChartRecord[];
   valueMatrix: ChartRecord[];
@@ -207,8 +205,7 @@ export function buildRawDatasetRows({
     impliedErp: pct(impliedErp),
   }, "S&P 500 implied ERP model: price from market API; cash-flow yields and consensus growth path are model assumptions until constituent-level estimates are wired");
   if (dcfData) pushRecord("backend_dcf", dcfData, "FastAPI /corporate/dcf response");
-  pushSeries("hurdle_rate_decomposition", regionalHurdle, "Hurdle Rate Decomposition chart dataset");
-  pushSeries("hurdle_bar_components", hurdleBars, "Bottom-up Ke component dataset");
+  pushSeries("hurdle_rate_decomposition", hurdleBars, "Hurdle Rate Decomposition chart dataset: risk-free rate, levered beta x ERP, CRP");
   pushSeries("beta_wacc_curve_beta_components", betaTreemapProxy, "Bottom-up Beta chart dataset");
   pushSeries("value_driver_matrix", valueMatrix, "4-Quadrant Value Driver Matrix dataset");
   return rows;

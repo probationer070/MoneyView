@@ -5,7 +5,7 @@ import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { fetchApi } from "@/lib/api";
 import { useT } from "@/lib/i18n/locale";
 import { BetaWaccCurveGraph, HurdleRateDecompositionGraph, ValueDriverMatrixGraph } from "./CorporateGraphs";
-import type { BetaPoint, DetailKey, HurdleBarPoint, RegionalHurdlePoint, ValueMatrixPoint } from "./graphs/shared";
+import type { BetaPoint, DetailKey, HurdleBarPoint, ValueMatrixPoint } from "./graphs/shared";
 import type { CorporateMetricsApi } from "../corporateTypes";
 
 // Spec §3.1: three charts in one row (2 below 992px, 1 below 768px). DCF Core Modules moved to
@@ -13,7 +13,6 @@ import type { CorporateMetricsApi } from "../corporateTypes";
 export function CorporateDiagnosticsSection({
   companyName,
   hurdleBars,
-  regionalHurdle,
   betaTreemapProxy,
   valueMatrix,
   matrixPeerTickers,
@@ -22,7 +21,6 @@ export function CorporateDiagnosticsSection({
 }: {
   companyName: string;
   hurdleBars: HurdleBarPoint[];
-  regionalHurdle: RegionalHurdlePoint[];
   betaTreemapProxy: BetaPoint[];
   valueMatrix: ValueMatrixPoint[];
   /** Same-sector watchlist tickers whose metrics become the matrix's comparison points. */
@@ -54,7 +52,7 @@ export function CorporateDiagnosticsSection({
         <InfoTooltip label={t("corporate.tabs.about")} description={t("corporate.tabs.diagnosticsAbout")} />
       </span>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <HurdleRateDecompositionGraph hurdleBars={hurdleBars} regionalHurdle={regionalHurdle} onOpenDetail={onOpenDetail} />
+        <HurdleRateDecompositionGraph hurdleBars={hurdleBars} onOpenDetail={onOpenDetail} />
         <BetaWaccCurveGraph betaTreemapProxy={betaTreemapProxy} onOpenDetail={onOpenDetail} />
         <ValueDriverMatrixGraph companyName={companyName} valueMatrix={[...valueMatrix, ...peerPoints]} growthReference={growthReference} onOpenDetail={onOpenDetail} />
       </div>

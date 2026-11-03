@@ -19,22 +19,9 @@ export interface HurdleBarPoint {
   fill: string;
 }
 
-export interface RegionalHurdlePoint {
-  region: string;
-  rf: number;
-  erp: number;
-  defaultSpread: number;
-  riskMultiplier: number;
-  crp: number;
-  revenue: number;
-}
-
 export interface BetaPoint {
   name: string;
   beta: number;
-  size: number;
-  /** A fixed example, not this company's value (plan 2026-11-02 §3 V5). */
-  illustrative?: boolean;
 }
 
 export interface ValueMatrixPoint {

@@ -3,7 +3,6 @@
 import { Bar, BarChart, CartesianGrid, Cell, Tooltip, XAxis, YAxis } from "recharts";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { useT } from "@/lib/i18n/locale";
-import { ExampleBadge } from "./ExampleBadge";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 import { GRID_STYLE, fmtRatioTick, withAxisProps, withCategoryAxisProps, withTooltipProps } from "@/lib/chartConfig";
 import { type BetaPoint, type DetailKey } from "./shared";
@@ -21,7 +20,6 @@ export function BetaWaccCurveGraph({
   onOpenDetail: (key: DetailKey) => void;
 }) {
   const t = useT();
-  const hasExamples = betaTreemapProxy.some((entry) => entry.illustrative);
   return (
     <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-5">
       <div className="flex flex-wrap items-center gap-2">
@@ -35,7 +33,6 @@ export function BetaWaccCurveGraph({
             description={t("corporate.charts.betaHelp")}
           />
         </button>
-        {hasExamples ? <ExampleBadge testId="example-badge-beta" why={t("corporate.charts.exampleBeta")} /> : null}
       </div>
       <div className="h-56 min-h-56 min-w-0">
         <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>
@@ -46,8 +43,7 @@ export function BetaWaccCurveGraph({
             <Tooltip {...withTooltipProps()} />
             <Bar dataKey="beta" name="Beta">
               {betaTreemapProxy.map((entry) => (
-                // An example bar is grey, like the matrix's example points: it is not this company's value.
-                <Cell key={entry.name} data-illustrative={entry.illustrative ? "true" : undefined} fill={entry.illustrative ? "var(--chart-4)" : entry.beta > 1.3 ? "var(--ink)" : "var(--chart-1)"} />
+                <Cell key={entry.name} fill={entry.beta > 1.3 ? "var(--ink)" : "var(--chart-1)"} />
               ))}
             </Bar>
           </BarChart>
