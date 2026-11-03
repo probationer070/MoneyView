@@ -35,6 +35,7 @@ import { VerdictBlock, VerdictStrip } from "./components/VerdictBlock";
 import { FairValueLine } from "@/components/valuation/FairValueLine";
 import { verdictView } from "./verdict";
 import { buildCalculationDetails } from "./buildCalculationDetails";
+import { basisLabels } from "./basisLabels";
 import { substitutedFormula } from "./substitutedFormula";
 import { buildFormulaContext } from "./formulaContext";
 import { historicalPriceStatus, quarterlyStatementsStatus } from "./detailStatus";
@@ -865,27 +866,19 @@ export default function CorporateAnalysisPage() {
   const annualGrowthRates = annualMetricRows(metricsHistoryData?.annual_growth_rates ?? []);
   const annualRoicValues = annualMetricRows(metricsHistoryData?.annual_roic ?? []);
   const selectedRoicYearValue = annualRoicValues.find((point) => String(point.year) === roicYear)?.value;
-  const roicYearUnavailableMessage = roicBasis === "annual" && selectedRoicYearValue == null
-    ? `${roicYear} ROIC unavailable from Yahoo statements. Retaining the current/manual ROIC value.`
-    : "";
-  const growthBasisLabel = growthMeta?.metric_role === "fallback"
-    ? "stable CAGR unavailable; fallback assumption in use"
-    : "stable CAGR";
-  const roicBasisLabel = roicBasis === "recent_average"
-    ? "recent multi-year average"
-    : roicBasis === "all_year_average"
-      ? "all available years average"
-      : `annual ${roicYear || annualRoicValues.at(-1)?.year || ""}`.trim();
-
-  const sourceLabel = [
-    growthMeta?.metric_role === "fallback"
-      ? "Growth is currently using a fallback assumption because stable CAGR was unavailable."
-      : "Growth is using the stable CAGR derived from Yahoo annual revenue where available.",
-    roicMeta?.metric_role === "fallback"
-      ? "ROIC is currently using a fallback assumption because the stable invested-capital pipeline was not decision-grade."
-      : "ROIC is using the stabilized NOPAT / average invested-capital pipeline.",
-    "Current slider/browser values and saved presets remain manual override layers.",
-  ].join(" ");
+  const {
+    roicYearUnavailableMessage,
+    growthBasisLabel,
+    roicBasisLabel,
+    sourceLabel,
+  } = basisLabels(t, {
+    growthFallback: growthMeta?.metric_role === "fallback",
+    roicFallback: roicMeta?.metric_role === "fallback",
+    roicBasis,
+    roicYear,
+    lastRoicYear: annualRoicValues.at(-1)?.year,
+    roicYearMissing: roicBasis === "annual" && selectedRoicYearValue == null,
+  });
 
   const calculationDetails = buildCalculationDetails({
     companyName,

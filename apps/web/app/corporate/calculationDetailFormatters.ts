@@ -1,3 +1,5 @@
+import { englishTr, type Tr } from "../cases/caseFields";
+
 export function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
@@ -22,8 +24,8 @@ export function moneyText(value: number) {
   return `$${value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
 }
 
-export function betaInterpretation(beta: number) {
-  if (beta === 1) return "Beta 1.00 implies market-level volatility.";
-  if (beta > 1) return `Beta ${numberText2(beta)} implies about ${numberText((beta - 1) * 100)}% higher volatility than the market.`;
-  return `Beta ${numberText2(beta)} implies about ${numberText((1 - beta) * 100)}% lower volatility than the market.`;
+export function betaInterpretation(beta: number, t: Tr = englishTr) {
+  if (beta === 1) return t("corporate.calc.beta.one");
+  if (beta > 1) return t("corporate.calc.beta.above", { beta: numberText2(beta), pct: numberText((beta - 1) * 100) });
+  return t("corporate.calc.beta.below", { beta: numberText2(beta), pct: numberText((1 - beta) * 100) });
 }

@@ -1052,6 +1052,24 @@ export const ko: Messages = {
       },
     },
     calc: {
+      beta: {
+        one: "베타 1.00은 시장 수준의 변동성을 의미합니다.",
+        above: "베타 {beta}는 시장보다 약 {pct}% 높은 변동성을 나타냅니다.",
+        below: "베타 {beta}는 시장보다 약 {pct}% 낮은 변동성을 나타냅니다.",
+      },
+      basis: {
+        growthFallback: "안정 CAGR을 구할 수 없어 대체 가정을 사용하고 있습니다",
+        growthStable: "안정 CAGR",
+        roicRecent: "최근 다년 평균",
+        roicAll: "전체 연도 평균",
+        roicAnnual: "연간 {year}",
+        roicUnavailable: "{year} ROIC를 야후 재무제표에서 구할 수 없습니다. 현재 값 또는 직접 입력한 ROIC 값을 유지합니다.",
+        sourceGrowthFallback: "안정 CAGR을 구할 수 없어 현재 성장률은 대체 가정을 사용하고 있습니다.",
+        sourceGrowthStable: "성장률은 야후 연간 매출에서 도출한 안정 CAGR을 가능한 경우 사용합니다.",
+        sourceRoicFallback: "안정 투하자본 산출 경로가 의사결정에 쓸 수준이 아니어서 현재 ROIC는 대체 가정을 사용하고 있습니다.",
+        sourceRoicStable: "ROIC는 안정화된 NOPAT / 평균 투하자본 산출 경로를 사용합니다.",
+        sourceOverrides: "현재 슬라이더·브라우저 값과 저장된 프리셋은 여전히 수동 재정의 계층으로 남습니다.",
+      },
       shared: {
         realtimeCalculation: "실시간 계산",
         realtimeControl: "실시간 가정 입력값",

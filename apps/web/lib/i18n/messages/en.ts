@@ -1051,6 +1051,24 @@ export const en = {
       },
     },
     calc: {
+      beta: {
+        one: "Beta 1.00 implies market-level volatility.",
+        above: "Beta {beta} implies about {pct}% higher volatility than the market.",
+        below: "Beta {beta} implies about {pct}% lower volatility than the market.",
+      },
+      basis: {
+        growthFallback: "stable CAGR unavailable; fallback assumption in use",
+        growthStable: "stable CAGR",
+        roicRecent: "recent multi-year average",
+        roicAll: "all available years average",
+        roicAnnual: "annual {year}",
+        roicUnavailable: "{year} ROIC unavailable from Yahoo statements. Retaining the current/manual ROIC value.",
+        sourceGrowthFallback: "Growth is currently using a fallback assumption because stable CAGR was unavailable.",
+        sourceGrowthStable: "Growth is using the stable CAGR derived from Yahoo annual revenue where available.",
+        sourceRoicFallback: "ROIC is currently using a fallback assumption because the stable invested-capital pipeline was not decision-grade.",
+        sourceRoicStable: "ROIC is using the stabilized NOPAT / average invested-capital pipeline.",
+        sourceOverrides: "Current slider/browser values and saved presets remain manual override layers.",
+      },
       shared: {
         realtimeCalculation: "Realtime calculation",
         realtimeControl: "Realtime Assumptions control",

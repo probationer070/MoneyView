@@ -328,7 +328,7 @@ export function buildCalculationDetails({
         { label: t("corporate.calc.unleveredBeta.raw.rawBeta"), value: numberText(assumptions.unleveredBeta), source: t("corporate.calc.unleveredBeta.raw.rawBetaSource") },
         { label: t("corporate.calc.common.leveredBeta"), value: numberText2(derived.leveredBeta), source: t("corporate.calc.unleveredBeta.raw.leveredBetaSource") },
         { label: t("corporate.calc.unleveredBeta.raw.betaDifference"), value: numberText2(derived.leveredBeta - assumptions.unleveredBeta), source: t("corporate.calc.unleveredBeta.raw.betaDifferenceSource") },
-        { label: t("corporate.calc.unleveredBeta.raw.betaInterpretation"), value: betaInterpretation(assumptions.unleveredBeta), source: t("corporate.calc.unleveredBeta.raw.betaInterpretationSource") },
+        { label: t("corporate.calc.unleveredBeta.raw.betaInterpretation"), value: betaInterpretation(assumptions.unleveredBeta, t), source: t("corporate.calc.unleveredBeta.raw.betaInterpretationSource") },
         { label: t("corporate.calc.unleveredBeta.raw.debtToEquity"), value: numberText(derived.debtToEquity), source: t("corporate.calc.unleveredBeta.raw.debtToEquitySource") },
       ],
       source: t("corporate.calc.unleveredBeta.source"),
@@ -345,7 +345,7 @@ export function buildCalculationDetails({
       timeHorizon: t("corporate.calc.leveredBeta.timeHorizon"),
       summary: [
         { label: t("corporate.calc.common.leveredBeta"), value: numberText2(derived.leveredBeta), source: derived.keFromWacc ? t("corporate.calc.leveredBeta.summary.fromWacc") : t("corporate.calc.common.hamadaFormula") },
-        { label: t("corporate.calc.leveredBeta.summary.interpretation"), value: betaInterpretation(derived.leveredBeta), source: t("corporate.calc.leveredBeta.summary.interpretationSource") },
+        { label: t("corporate.calc.leveredBeta.summary.interpretation"), value: betaInterpretation(derived.leveredBeta, t), source: t("corporate.calc.leveredBeta.summary.interpretationSource") },
         { label: t("corporate.calc.common.unleveredBeta"), value: numberText(assumptions.unleveredBeta), source: sourceLabel },
         { label: t("corporate.calc.leveredBeta.summary.debtEquity"), value: numberText(derived.debtToEquity), source: t("corporate.calc.leveredBeta.summary.debtEquitySource", { debt: pct(assumptions.debtRatio), equity: pct(100 - assumptions.debtRatio) }) },
         { label: t("corporate.calc.leveredBeta.summary.taxShield"), value: pct((1 - taxRate) * 100), source: t("corporate.calc.leveredBeta.summary.taxShieldSource", { rate: pct(taxRate * 100) }) },
@@ -658,14 +658,14 @@ export function buildCalculationDetails({
         {
           label: t("corporate.calc.bottomUpBeta.betaUComponent"),
           value: numberText2(assumptions.unleveredBeta),
-          source: t("corporate.calc.bottomUpBeta.betaUSource", { interpretation: betaInterpretation(assumptions.unleveredBeta) }),
+          source: t("corporate.calc.bottomUpBeta.betaUSource", { interpretation: betaInterpretation(assumptions.unleveredBeta, t) }),
         },
         {
           label: t("corporate.calc.bottomUpBeta.betaLComponent"),
           value: numberText2(derived.leveredBeta),
           source: t("corporate.calc.bottomUpBeta.betaLSource", {
             inWacc: derived.keFromWacc ? t("corporate.calc.bottomUpBeta.leveredInWacc") : t("corporate.calc.bottomUpBeta.reReleveredKe"),
-            interpretation: betaInterpretation(derived.leveredBeta),
+            interpretation: betaInterpretation(derived.leveredBeta, t),
           }),
         },
       ],
@@ -678,7 +678,7 @@ export function buildCalculationDetails({
           value: numberText2(derived.leveredBeta),
           source: derived.keFromWacc ? t("corporate.calc.bottomUpBeta.betaLSourceFull") : t("corporate.calc.bottomUpBeta.betaLSourceCalc"),
         },
-        { label: t("corporate.calc.bottomUpBeta.betaConvention"), value: betaInterpretation(derived.leveredBeta), source: t("corporate.calc.bottomUpBeta.betaSourceNote") },
+        { label: t("corporate.calc.bottomUpBeta.betaConvention"), value: betaInterpretation(derived.leveredBeta, t), source: t("corporate.calc.bottomUpBeta.betaSourceNote") },
         { label: t("corporate.calc.common.debtRatio"), value: pct(assumptions.debtRatio), source: t("corporate.calc.bottomUpBeta.debtRatioAvg") },
         { label: t("corporate.calc.common.taxRate"), value: pct(taxRate * 100), source: t("corporate.calc.bottomUpBeta.taxAssumption") },
       ],
