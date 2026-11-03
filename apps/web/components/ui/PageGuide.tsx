@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { useT } from "@/lib/i18n/locale";
 
 /**
@@ -10,10 +10,13 @@ import { useT } from "@/lib/i18n/locale";
  */
 export function PageGuide({ children, testId = "page-guide" }: { children: ReactNode; testId?: string }) {
   const t = useT();
+  // The body mounts only while open: a closed <details> keeps its text in the DOM, where the guide's
+  // mentions of on-screen labels ("Portfolio Return") collide with lookups of the labels themselves.
+  const [open, setOpen] = useState(false);
   return (
-    <details data-testid={testId} className="border border-[var(--line)] bg-[var(--surface-raised)]">
+    <details data-testid={testId} className="border border-[var(--line)] bg-[var(--surface-raised)]" onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary className="type-label cursor-pointer px-4 py-3 text-[var(--ink)]">{t("guide.summary")}</summary>
-      <div className="flex flex-col gap-4 border-t border-[var(--line)] p-4">{children}</div>
+      {open ? <div className="flex flex-col gap-4 border-t border-[var(--line)] p-4">{children}</div> : null}
     </details>
   );
 }
