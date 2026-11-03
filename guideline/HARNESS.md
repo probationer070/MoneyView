@@ -60,6 +60,29 @@ Never hand a whole implementation plan to one Opus agent to execute. The control
 dispatches one task at a time. Verify by execution, not by an agent's report
 ([`sop/test-verification.md`](sop/test-verification.md)).
 
+### Subagent token budget (owner, 2026-11-04)
+
+A subagent whose context has grown large is replaced, not continued. On 2026-11-03/04 the
+guide agents used 199k-228k tokens each for three pages, against about 70-100k for a
+one-file task.
+
+- **Size the task to fit about 100k tokens.** Give one screen or one module per task, not
+  three. State the files, the tests and the mutations in the prompt, so the agent does not
+  spend tokens rediscovering them.
+- **Do not continue an agent that has gone over 150k tokens.** This applies when it has
+  stopped with work left, or is waiting on its own background work. Do not continue it
+  with SendMessage, because each turn re-reads its whole context. Stop it (TaskStop) and
+  check the working tree. Then spawn a fresh agent with only the remaining work, plus the
+  facts the first one found: files already changed, results, and blockers.
+- **Stop an agent still running after 20 minutes.** The controller sees an agent's tokens
+  only when it stops, so time is the signal while it runs. Stop it, check the tree, and
+  hand the rest to a fresh agent.
+- **Keep long test runs out of the agent.** An agent runs its own specs and the
+  mutations. The controller runs the wide regression (full Playwright chunks, full pytest)
+  itself, in the background.
+- **Report every hand-back over 70k, and name each replacement.** Say which agent was
+  replaced and why, in the between-task summary.
+
 ## Where each artifact lives
 
 | Artifact | Location |
