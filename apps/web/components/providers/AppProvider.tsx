@@ -6,8 +6,10 @@ import { useState, useEffect, ReactNode } from "react";
 import { Activity, AlertTriangle } from "lucide-react";
 import { setDynamicPort } from "@/lib/api";
 import { resolveBackendPort } from "@/lib/backendPortDiscovery";
+import { useT } from "@/lib/i18n/locale";
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const t = useT();
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
@@ -73,9 +75,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--status-error-surface)] text-[var(--status-error-ink)] border-2 border-[var(--status-error-border)]">
         <AlertTriangle className="h-12 w-12 text-[var(--status-error-ink)] mb-4 animate-pulse" />
-        <h2 className="type-panel-title">System Boot Failure</h2>
+        <h2 className="type-panel-title">{t("boot.failedTitle")}</h2>
         <p className="type-body mt-2 max-w-sm text-center">
-          The core Python analytics engine failed to start or coordinate properly within the 30-second initialization limit.
+          {t("boot.failedBody")}
         </p>
       </div>
     );
@@ -85,8 +87,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--bg)] text-[var(--ink)]">
         <Activity className="h-12 w-12 text-[var(--brand-text)] animate-bounce mb-4" />
-        <h2 className="type-panel-title">Starting Core Analytics...</h2>
-        <p className="type-body text-[var(--ink-muted)] mt-2">Discovering dynamic port mapping & initiating connection.</p>
+        <h2 className="type-panel-title">{t("boot.startingTitle")}</h2>
+        <p className="type-body text-[var(--ink-muted)] mt-2">{t("boot.startingBody")}</p>
       </div>
     );
   }

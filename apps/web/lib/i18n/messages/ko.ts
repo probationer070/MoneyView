@@ -1697,4 +1697,10 @@ export const ko: Messages = {
     method: "방법:",
     confidence: "신뢰도:",
   },
+  boot: {
+    failedTitle: "시스템 시작 실패",
+    failedBody: "Python 분석 엔진이 30초 초기화 제한 시간 안에 정상적으로 시작되거나 연결되지 않았습니다.",
+    startingTitle: "분석 엔진을 시작하는 중입니다...",
+    startingBody: "포트를 찾아 연결하고 있습니다.",
+  },
 };

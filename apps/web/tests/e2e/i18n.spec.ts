@@ -91,8 +91,16 @@ test("html lang follows the stored locale while the backend is still starting", 
   await page.addInitScript(() => window.localStorage.setItem("moneyview.locale", "ko"));
   await page.route("**/api/v1/health", (route) => route.abort());
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { name: "Starting Core Analytics..." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "분석 엔진을 시작하는 중입니다..." })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "ko");
+});
+
+test("the splash heading is English while the backend is still starting with stored locale en", async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("moneyview.locale", "en"));
+  await page.route("**/api/v1/health", (route) => route.abort());
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: "Starting Core Analytics..." })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
 });
 
 test.describe("ko shared error state", () => {

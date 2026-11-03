@@ -1696,6 +1696,12 @@ export const en = {
     method: "Method:",
     confidence: "Confidence:",
   },
+  boot: {
+    failedTitle: "System Boot Failure",
+    failedBody: "The core Python analytics engine failed to start or coordinate properly within the 30-second initialization limit.",
+    startingTitle: "Starting Core Analytics...",
+    startingBody: "Discovering dynamic port mapping & initiating connection.",
+  },
 } as const;
 
 type Widen<T> = { [K in keyof T]: T[K] extends string ? string : Widen<T[K]> };
