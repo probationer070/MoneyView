@@ -76,7 +76,7 @@ import type {
   WatchlistHolding,
 } from "./corporateTypes";
 import { isComparisonSortKey } from "./corporateTypes";
-import { useLocale } from "@/lib/i18n/locale";
+import { useLocale, useT } from "@/lib/i18n/locale";
 import {
   annualMetricRows,
   clamp,
@@ -141,6 +141,7 @@ function tickerFromAddress(): string | undefined {
 export default function CorporateAnalysisPage() {
   useDevMonitorPageLoad({ component: "corporate" });
   const { locale } = useLocale();
+  const t = useT();
   // Local UI state: selected ticker assumptions, search input, add-company form, and active modal.
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -907,6 +908,7 @@ export default function CorporateAnalysisPage() {
     impliedErp,
     hasSp500Data: Boolean(sp500Query.data),
     valueMatrix,
+    t,
   });
 
   const activeCalculationDetail = activeCalculation ? calculationDetails[activeCalculation] : null;
