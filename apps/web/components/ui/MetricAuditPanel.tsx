@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { BilingualLabel } from "@/components/ui/BilingualLabel";
 import { MetricQualityBadge } from "@/components/ui/MetricQualityBadge";
 import { formatAuditMetricValue, isDecisionGradeMetric, metricAuditReason, metricQualityTone } from "@/lib/metricAudit";
+import { useT } from "@/lib/i18n/locale";
 
 function AuditInputsTable({ entry }: { entry: CorporateMetricAuditEntry }) {
   return (
@@ -40,13 +41,14 @@ export function MetricAuditPanel({
   metric: "growth" | "roic" | "wacc" | "spread";
   title: string;
 }) {
+  const t = useT();
   if (!audit) {
-    return <EmptyState title={`${title} audit unavailable`} description="Refresh or reopen the metric detail to load the calculation audit." />;
+    return <EmptyState title={t("metricAudit.unavailableTitle", { title })} description={t("metricAudit.unavailableDescription")} />;
   }
 
   const entry = audit[metric];
   if (!entry) {
-    return <EmptyState title={`${title} audit unavailable`} description="Refresh or reopen the metric detail to load the calculation audit." />;
+    return <EmptyState title={t("metricAudit.unavailableTitle", { title })} description={t("metricAudit.unavailableDescription")} />;
   }
 
   return (
@@ -56,21 +58,21 @@ export function MetricAuditPanel({
           <h3 className="type-body text-[var(--ink)]">{title}</h3>
           <div className="mt-2 flex flex-col gap-2 type-small text-[var(--ink-muted)]">
             <p className="overflow-wrap-anywhere">
-              Source: <span className="text-[var(--ink)]">{entry.source || "Unavailable"}</span>
-              {entry.as_of ? <span title={entry.as_of}> • As of {entry.as_of}</span> : null}
+              {t("metricAudit.source")} <span className="text-[var(--ink)]">{entry.source || t("metricAudit.unavailable")}</span>
+              {entry.as_of ? <span title={entry.as_of}> • {t("metricAudit.asOf", { date: entry.as_of })}</span> : null}
             </p>
             {entry.calculation_version ? (
               <div
                 className="overflow-mono-block rounded-[var(--radius-2)] bg-[var(--surface)] px-2 py-1 type-caption text-[var(--ink)]"
                 title={entry.calculation_version}
               >
-                Calculation version: {entry.calculation_version}
+                {t("metricAudit.calculationVersion", { version: entry.calculation_version })}
               </div>
             ) : null}
             <p>
-              Method: <span className="text-[var(--ink)]">{entry.method || "Unavailable"}</span>
+              {t("metricAudit.method")} <span className="text-[var(--ink)]">{entry.method || t("metricAudit.unavailable")}</span>
               {" "}
-              Confidence: <span className="text-[var(--ink)]">{Math.round(entry.confidence * 100)}%</span>
+              {t("metricAudit.confidence")} <span className="text-[var(--ink)]">{Math.round(entry.confidence * 100)}%</span>
             </p>
           </div>
         </div>

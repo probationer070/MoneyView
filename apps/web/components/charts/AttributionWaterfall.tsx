@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartPanelFrame } from "@/components/charts/ChartPanelFrame";
-import { useLocale } from "@/lib/i18n/locale";
+import { useLocale, useT } from "@/lib/i18n/locale";
 import { formatNumber } from "@/lib/format";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 import { GRID_STYLE, fmtPctTick, withAxisProps, withCategoryAxisProps, withTooltipProps } from "@/lib/chartConfig";
+
+type Translate = ReturnType<typeof useT>;
 
 interface AttributionWaterfallProps {
   data: Array<{ name: string; value: number }>;
@@ -27,16 +29,18 @@ function percentText(value: number) {
 function topSectorDriver(
   sectorBreakdowns: NonNullable<AttributionWaterfallProps["sectorBreakdowns"]>,
   key: "allocation_effect" | "selection_effect" | "interaction_effect" | "active_contribution",
+  t: Translate,
 ) {
   const top = sectorBreakdowns
     .filter((row) => Number.isFinite(row[key]))
     .sort((a, b) => Math.abs(b[key]) - Math.abs(a[key]))[0];
-  if (!top || Math.abs(top[key]) < 0.00005) return "No single sector materially dominated this effect.";
-  return `Largest sector driver: ${top.sector} contributed ${percentText(top[key])}.`;
+  if (!top || Math.abs(top[key]) < 0.00005) return t("attribution.waterfall.driver.none");
+  return t("attribution.waterfall.driver.top", { sector: top.sector, value: percentText(top[key]) });
 }
 
 export function AttributionWaterfall({ data, sectorBreakdowns = [] }: AttributionWaterfallProps) {
   const { locale } = useLocale();
+  const t = useT();
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const formatted = data.map((row) => ({
     ...row,
@@ -47,35 +51,35 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
     const values = Object.fromEntries(data.map((row) => [row.name, row.value]));
     return [
       {
-        name: "Allocation",
+        name: t("attribution.waterfall.effects.allocation.name"),
         value: values.Allocation ?? 0,
-        represents: "Whether the portfolio was overweight or underweight sectors versus the benchmark.",
-        calculation: "Allocation_i = (portfolio weight_i - benchmark weight_i) x (benchmark sector return_i - total benchmark return); total allocation is the sum across sectors.",
-        driver: topSectorDriver(sectorBreakdowns, "allocation_effect"),
+        represents: t("attribution.waterfall.effects.allocation.represents"),
+        calculation: t("attribution.waterfall.effects.allocation.calculation"),
+        driver: topSectorDriver(sectorBreakdowns, "allocation_effect", t),
       },
       {
-        name: "Selection",
+        name: t("attribution.waterfall.effects.selection.name"),
         value: values.Selection ?? 0,
-        represents: "Whether selected holdings outperformed or underperformed their matched benchmark or sector return.",
-        calculation: "Selection_i = benchmark weight_i x (portfolio sector return_i - benchmark sector return_i); total selection is the sum across sectors.",
-        driver: topSectorDriver(sectorBreakdowns, "selection_effect"),
+        represents: t("attribution.waterfall.effects.selection.represents"),
+        calculation: t("attribution.waterfall.effects.selection.calculation"),
+        driver: topSectorDriver(sectorBreakdowns, "selection_effect", t),
       },
       {
-        name: "Interaction",
+        name: t("attribution.waterfall.effects.interaction.name"),
         value: values.Interaction ?? 0,
-        represents: "The combined effect of active sector weights and active stock selection happening together.",
-        calculation: "Interaction_i = (portfolio weight_i - benchmark weight_i) x (portfolio sector return_i - benchmark sector return_i); total interaction is the sum across sectors.",
-        driver: topSectorDriver(sectorBreakdowns, "interaction_effect"),
+        represents: t("attribution.waterfall.effects.interaction.represents"),
+        calculation: t("attribution.waterfall.effects.interaction.calculation"),
+        driver: topSectorDriver(sectorBreakdowns, "interaction_effect", t),
       },
       {
-        name: "Active Return",
+        name: t("attribution.waterfall.effects.activeReturn.name"),
         value: values["Active Return"] ?? 0,
-        represents: "The total excess return of the portfolio versus the benchmark.",
-        calculation: "Active Return = Portfolio Return - Benchmark Return = Allocation + Selection + Interaction.",
-        driver: topSectorDriver(sectorBreakdowns, "active_contribution"),
+        represents: t("attribution.waterfall.effects.activeReturn.represents"),
+        calculation: t("attribution.waterfall.effects.activeReturn.calculation"),
+        driver: topSectorDriver(sectorBreakdowns, "active_contribution", t),
       },
     ];
-  }, [data, sectorBreakdowns]);
+  }, [data, sectorBreakdowns, t]);
 
   useEffect(() => {
     if (!isDetailOpen) return;
@@ -90,15 +94,15 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
     <>
       <ChartPanelFrame
         empty={formatted.length === 0}
-        emptyTitle="No attribution effects available"
-        emptyDescription="Refresh attribution results to compare allocation, selection, interaction, and active return."
+        emptyTitle={t("attribution.waterfall.emptyTitle")}
+        emptyDescription={t("attribution.waterfall.emptyDescription")}
         className="min-h-[320px] min-w-0 bg-[var(--surface-raised)]"
       >
         <div className="mb-3 flex items-center justify-between gap-3">
           <h3 className="type-body text-[var(--ink)]">
             <InfoTooltip
-              label="Attribution Effects (%)"
-              description="Brinson-style attribution decomposes active return into allocation, selection, and interaction effects. Positive percentages add value versus the benchmark; negative percentages detract."
+              label={t("attribution.waterfall.tooltipLabel")}
+              description={t("attribution.waterfall.tooltipDescription")}
             />
           </h3>
           <button
@@ -106,7 +110,7 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
             onClick={() => setIsDetailOpen(true)}
             className="rounded-[var(--radius-1)] border border-[var(--line)] px-2 py-1 type-small text-[var(--ink-muted)] transition hover:border-[var(--brand)] hover:text-[var(--ink)]"
           >
-            Details
+            {t("attribution.waterfall.details")}
           </button>
         </div>
         <div className="h-[220px] min-h-[220px]">
@@ -132,7 +136,7 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
           className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay-scrim)] p-4"
           role="dialog"
           aria-modal="true"
-          aria-label="Attribution effects methodology"
+          aria-label={t("attribution.waterfall.dialogLabel")}
           onMouseDown={() => setIsDetailOpen(false)}
         >
           <div
@@ -141,9 +145,9 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
           >
             <div className="flex items-start justify-between gap-4 border-b border-[var(--line)] pb-4">
               <div>
-                <h2 className="type-panel-title text-[var(--ink)]">Attribution Effects Methodology</h2>
+                <h2 className="type-panel-title text-[var(--ink)]">{t("attribution.waterfall.methodologyTitle")}</h2>
                 <p className="mt-1 type-body text-[var(--ink-muted)]">
-                  X-axis values explain which source of active return added or detracted from benchmark-relative performance.
+                  {t("attribution.waterfall.methodologySubtitle")}
                 </p>
               </div>
               <button
@@ -151,7 +155,7 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
                 onClick={() => setIsDetailOpen(false)}
                 className="rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-1 type-body text-[var(--ink-muted)] hover:text-[var(--ink)]"
               >
-                Close
+                {t("attribution.waterfall.close")}
               </button>
             </div>
 
@@ -166,11 +170,11 @@ export function AttributionWaterfall({ data, sectorBreakdowns = [] }: Attributio
                   </div>
                   <p className="mt-2 type-body text-[var(--ink)]">{effect.represents}</p>
                   <p className="mt-2 type-small text-[var(--ink-muted)]">
-                    <span className="text-[var(--ink)]">Calculation: </span>
+                    <span className="text-[var(--ink)]">{t("attribution.waterfall.calculationLabel")}</span>{" "}
                     {effect.calculation}
                   </p>
                   <p className="mt-2 type-small text-[var(--ink-muted)]">
-                    <span className="text-[var(--ink)]">Largest observed driver: </span>
+                    <span className="text-[var(--ink)]">{t("attribution.waterfall.largestDriverLabel")}</span>{" "}
                     {effect.driver}
                   </p>
                 </section>

@@ -1646,4 +1646,55 @@ export const ko: Messages = {
       empty: "아직 평가한 경계 지표가 없습니다.",
     },
   },
+  attribution: {
+    waterfall: {
+      effects: {
+        allocation: {
+          name: "배분 효과",
+          represents: "포트폴리오가 벤치마크 대비 섹터를 과다 보유했는지 과소 보유했는지를 나타냅니다.",
+          calculation: "배분_i = (포트폴리오 비중_i − 벤치마크 비중_i) × (벤치마크 섹터 수익률_i − 벤치마크 전체 수익률); 전체 배분 효과는 섹터별 합계입니다.",
+        },
+        selection: {
+          name: "선택 효과",
+          represents: "선택한 종목이 대응하는 벤치마크 또는 섹터 수익률보다 높았는지 낮았는지를 나타냅니다.",
+          calculation: "선택_i = 벤치마크 비중_i × (포트폴리오 섹터 수익률_i − 벤치마크 섹터 수익률_i); 전체 선택 효과는 섹터별 합계입니다.",
+        },
+        interaction: {
+          name: "상호작용 효과",
+          represents: "섹터 비중의 능동적 차이와 종목 선택이 함께 작용한 결합 효과입니다.",
+          calculation: "상호작용_i = (포트폴리오 비중_i − 벤치마크 비중_i) × (포트폴리오 섹터 수익률_i − 벤치마크 섹터 수익률_i); 전체 상호작용 효과는 섹터별 합계입니다.",
+        },
+        activeReturn: {
+          name: "초과 수익률",
+          represents: "벤치마크 대비 포트폴리오의 총 초과 수익률입니다.",
+          calculation: "초과 수익률 = 포트폴리오 수익률 − 벤치마크 수익률 = 배분 효과 + 선택 효과 + 상호작용 효과입니다.",
+        },
+      },
+      driver: {
+        none: "이 효과에서 단일 섹터가 뚜렷하게 우위를 차지하지 않았습니다.",
+        top: "최대 섹터 기여 요인: {sector}, 기여도 {value}입니다.",
+      },
+      emptyTitle: "성과 귀속 효과 데이터가 없습니다",
+      emptyDescription: "배분, 선택, 상호작용 효과와 초과 수익률을 비교하려면 성과 귀속 결과를 새로 고치십시오.",
+      tooltipLabel: "성과 귀속 효과 (%)",
+      tooltipDescription: "Brinson 방식의 성과 귀속 분석은 초과 수익률을 배분, 선택, 상호작용 효과로 분해합니다. 양수(%)는 벤치마크 대비 가치를 더했음을, 음수(%)는 가치를 훼손했음을 뜻합니다.",
+      details: "상세",
+      dialogLabel: "성과 귀속 효과 방법론",
+      methodologyTitle: "성과 귀속 효과 방법론",
+      methodologySubtitle: "X축 값은 벤치마크 대비 성과에서 어떤 원천의 초과 수익률이 가치를 더하거나 훼손했는지 보여줍니다.",
+      close: "닫기",
+      calculationLabel: "계산식:",
+      largestDriverLabel: "가장 큰 관측 요인:",
+    },
+  },
+  metricAudit: {
+    unavailableTitle: "{title} 감사 정보를 사용할 수 없습니다",
+    unavailableDescription: "상세 화면을 새로 고치거나 다시 열어 계산 감사 내역을 불러오십시오.",
+    source: "출처:",
+    unavailable: "확인 불가",
+    asOf: "{date} 기준",
+    calculationVersion: "계산 버전: {version}",
+    method: "방법:",
+    confidence: "신뢰도:",
+  },
 };

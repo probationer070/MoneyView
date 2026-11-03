@@ -1645,6 +1645,57 @@ export const en = {
       empty: "No warning indicator has been evaluated yet.",
     },
   },
+  attribution: {
+    waterfall: {
+      effects: {
+        allocation: {
+          name: "Allocation",
+          represents: "Whether the portfolio was overweight or underweight sectors versus the benchmark.",
+          calculation: "Allocation_i = (portfolio weight_i - benchmark weight_i) x (benchmark sector return_i - total benchmark return); total allocation is the sum across sectors.",
+        },
+        selection: {
+          name: "Selection",
+          represents: "Whether selected holdings outperformed or underperformed their matched benchmark or sector return.",
+          calculation: "Selection_i = benchmark weight_i x (portfolio sector return_i - benchmark sector return_i); total selection is the sum across sectors.",
+        },
+        interaction: {
+          name: "Interaction",
+          represents: "The combined effect of active sector weights and active stock selection happening together.",
+          calculation: "Interaction_i = (portfolio weight_i - benchmark weight_i) x (portfolio sector return_i - benchmark sector return_i); total interaction is the sum across sectors.",
+        },
+        activeReturn: {
+          name: "Active Return",
+          represents: "The total excess return of the portfolio versus the benchmark.",
+          calculation: "Active Return = Portfolio Return - Benchmark Return = Allocation + Selection + Interaction.",
+        },
+      },
+      driver: {
+        none: "No single sector materially dominated this effect.",
+        top: "Largest sector driver: {sector} contributed {value}.",
+      },
+      emptyTitle: "No attribution effects available",
+      emptyDescription: "Refresh attribution results to compare allocation, selection, interaction, and active return.",
+      tooltipLabel: "Attribution Effects (%)",
+      tooltipDescription: "Brinson-style attribution decomposes active return into allocation, selection, and interaction effects. Positive percentages add value versus the benchmark; negative percentages detract.",
+      details: "Details",
+      dialogLabel: "Attribution effects methodology",
+      methodologyTitle: "Attribution Effects Methodology",
+      methodologySubtitle: "X-axis values explain which source of active return added or detracted from benchmark-relative performance.",
+      close: "Close",
+      calculationLabel: "Calculation:",
+      largestDriverLabel: "Largest observed driver:",
+    },
+  },
+  metricAudit: {
+    unavailableTitle: "{title} audit unavailable",
+    unavailableDescription: "Refresh or reopen the metric detail to load the calculation audit.",
+    source: "Source:",
+    unavailable: "Unavailable",
+    asOf: "As of {date}",
+    calculationVersion: "Calculation version: {version}",
+    method: "Method:",
+    confidence: "Confidence:",
+  },
 } as const;
 
 type Widen<T> = { [K in keyof T]: T[K] extends string ? string : Widen<T[K]> };
