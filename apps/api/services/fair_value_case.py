@@ -40,14 +40,30 @@ _INDUSTRY_COLUMNS = (
     "effective_tax_rate", "cost_of_capital", "sales_to_capital",
 )
 
+# Commodity-price cyclical industries. Their 5-year revenue growth tracks a commodity price cycle,
+# and extrapolating it (Precious Metals' 46% in the 2026-01-01 vintage) put ten tickers at three
+# times their price. For these the blend uses the riskfree rate in place of the industry growth
+# (owner decision 2026-11-03, measured as variant 4a in docs/reports/2026-11-fair-value-whatif.md).
+# Names are the stored Damodaran industry names, exactly as `IndustryRow.name` carries them.
+COMMODITY_INDUSTRIES: frozenset[str] = frozenset({
+    "Precious Metals", "Metals & Mining", "Steel", "Coal & Related Energy",
+    "Oil/Gas (Production and Exploration)", "Oil/Gas (Integrated)", "Oilfield Svcs/Equip.",
+    "Chemical (Basic)", "Paper/Forest Products", "Farming/Agriculture",
+})
+
 
 class FairValueRefused(ValueError):
     """No fair-value case: the message starts with a machine-readable reason prefix."""
 
 
-def fair_value_case_name(ticker: str, vintage: str, latest_year: int) -> str:
-    """One name per ticker, benchmark vintage and statement year: new statements make a new case."""
-    return f"damodaran_{ticker.upper()}_{vintage}_FY{latest_year}"
+def fair_value_case_name(ticker: str, vintage: str, latest_year: int, *, cyclical: bool = False) -> str:
+    """One name per ticker, benchmark vintage and statement year: new statements make a new case.
+
+    A commodity-cyclical industry's case carries a `_cyclical` suffix: it was built under a different
+    growth rule, so an older case with the plain name must not be reused for it.
+    """
+    name = f"damodaran_{ticker.upper()}_{vintage}_FY{latest_year}"
+    return f"{name}_cyclical" if cyclical else name
 
 
 def company_revenue_cagr(revenue_by_year: dict[int, float]) -> float | None:
@@ -104,7 +120,9 @@ def build_fair_value_case(
     bench = f"damodaran_industry_{vintage}"
     where = f"{industry.name} ({industry.firms} firms, vintage {vintage})"
 
-    blended = (company_growth + ind["revenue_growth"]) / 2.0
+    cyclical = industry.name in COMMODITY_INDUSTRIES
+    industry_growth = riskfree_rate if cyclical else ind["revenue_growth"]
+    blended = (company_growth + industry_growth) / 2.0
     g = min(max(blended, GROWTH_FLOOR), GROWTH_CAP)
     revenue_target = baseline.base_revenue
     for rate in growth_path(g, riskfree_rate):
@@ -138,9 +156,19 @@ def build_fair_value_case(
         )
         terminal_growth = 0.0
 
+    if cyclical:
+        growth_source = (
+            f"the average of the company's revenue CAGR {company_growth:.4f} and the riskfree rate "
+            f"{riskfree_rate:.4f}, which replaces the industry's 5-year revenue growth "
+            f"{ind['revenue_growth']:.4f} because {industry.name} is a commodity-cycle industry"
+        )
+    else:
+        growth_source = (
+            f"the average of the company's revenue CAGR {company_growth:.4f} and "
+            f"{where} revenue growth {ind['revenue_growth']:.4f}"
+        )
     growth_claim = (
-        f"Years 1-5 at {g:.4f}: the average of the company's revenue CAGR {company_growth:.4f} and "
-        f"{where} revenue growth {ind['revenue_growth']:.4f}"
+        f"Years 1-5 at {g:.4f}: {growth_source}"
         + (f", held inside [{GROWTH_FLOOR}, {GROWTH_CAP}]" if g != blended else "")
         + f"; years 6-10 fade linearly to the riskfree rate {riskfree_rate:.4f}."
     )
@@ -166,7 +194,7 @@ def build_fair_value_case(
     ]
 
     return {
-        "case_name": fair_value_case_name(ticker, vintage, latest_year),
+        "case_name": fair_value_case_name(ticker, vintage, latest_year, cyclical=cyclical),
         "ticker": ticker.upper(),
         "as_of_date": f"{base_year}-01-01",
         "base_year": base_year,

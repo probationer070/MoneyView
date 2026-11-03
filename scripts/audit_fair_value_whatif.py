@@ -72,8 +72,8 @@ def _install(variant: str):
 
     orig_build, orig_name = fv.build_fair_value_case, fv.fair_value_case_name
 
-    def name(ticker, vintage, latest_year):
-        return f"{orig_name(ticker, vintage, latest_year)}_wi{variant}"
+    def name(ticker, vintage, latest_year, **kw):
+        return f"{orig_name(ticker, vintage, latest_year, **kw)}_wi{variant}"
 
     def build(ticker, baseline, industry, **kw):
         commodity = industry.name in COMMODITY

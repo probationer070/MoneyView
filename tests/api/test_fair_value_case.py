@@ -182,3 +182,45 @@ def test_a_missing_or_implausible_industry_column_refuses(column):
         with pytest.raises(FairValueRefused) as refused:
             _build(industry=industry)
         assert str(refused.value).startswith("industry_column:") and column in str(refused.value)
+
+
+PRECIOUS_METALS = IndustryRow("Precious Metals", 12, {**INDUSTRY.values, "revenue_growth": 0.46})
+NON_COMMODITY = IndustryRow("Computers/Peripherals", 36, {**INDUSTRY.values, "revenue_growth": 0.46})
+
+
+def test_a_commodity_industry_takes_the_riskfree_rate_in_place_of_its_growth():
+    """Catches the cyclical branch dropped (the 46% industry growth used again), or the riskfree
+    rate used without the blend. Expected growth is re-derived: (0.10 + 0.042) / 2 = 0.071."""
+    payload = build_fair_value_case(
+        "AAPL", BASELINE, PRECIOUS_METALS, vintage="2026-01-01", latest_year=2025,
+        company_growth=0.10, riskfree_rate=0.042, marginal_tax_rate=0.25, base_year=2026,
+    )
+    g = (0.10 + 0.042) / 2
+    revenue = BASELINE.base_revenue
+    for t in range(1, 11):
+        rate = g if t <= 5 else g + (0.042 - g) * (t - 5) / 5
+        revenue *= 1 + rate
+    assert payload["segments"][0]["revenue_target"] == pytest.approx(revenue, rel=1e-12)
+    claim = next(n["claim"] for n in payload["segments"][0]["narratives"] if n["input_field"] == "revenue_target")
+    assert "replaces the industry's 5-year revenue growth 0.4600" in claim
+    assert "commodity-cycle industry" in claim
+    assert payload["case_name"].endswith("_cyclical")
+
+
+def test_a_non_commodity_industry_keeps_the_industry_growth_in_the_blend():
+    """Catches the cyclical rule applied to every industry: the same 46% growth must still blend
+    to (0.10 + 0.46) / 2 and clamp to GROWTH_CAP, and the narrative must still name the industry."""
+    payload = _build(company_growth=0.10, industry=NON_COMMODITY)
+    assert payload["segments"][0]["revenue_target"] == pytest.approx(_expected_revenue_target(400.0, GROWTH_CAP), rel=1e-12)
+    claim = next(n["claim"] for n in payload["segments"][0]["narratives"] if n["input_field"] == "revenue_target")
+    assert "revenue growth 0.4600" in claim
+    assert "commodity-cycle" not in claim
+    assert not payload["case_name"].endswith("_cyclical")
+
+
+def test_the_cyclical_case_name_carries_the_suffix_and_the_default_is_unchanged():
+    """Catches the suffix never added (an old commodity case would be reused), or the plain name
+    changed for every industry (a stored non-commodity case would stop being found)."""
+    assert fair_value_case_name("AAPL", "2026-01-01", 2025, cyclical=True) == "damodaran_AAPL_2026-01-01_FY2025_cyclical"
+    assert fair_value_case_name("AAPL", "2026-01-01", 2025) == "damodaran_AAPL_2026-01-01_FY2025"
+    assert fair_value_case_name("AAPL", "2026-01-01", 2025, cyclical=False) == "damodaran_AAPL_2026-01-01_FY2025"

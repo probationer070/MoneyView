@@ -224,3 +224,10 @@ value_per_share, gap_pct, refusal}], range:{low, mid, high}|null}`. 거절은 42
 그 업종의 P/E 행은 `no_multiple`). 교체 후 AAPL은 186–256, NVDA는 141–239.
 남은 것: 가치평가 탭 판정 패널(`valuation_verdict`)의 PER 비교도 단순 평균 `trailing_pe`를 쓴다(오너 결정 필요).
 EV/Sales·P/B 열이 합계 배수인지는 확인하지 않았다.
+
+**④·⑤ 결정과 ④ 완료 (2026-11-03).** 측정: `docs/reports/2026-11-fair-value-whatif.md`(`scripts/audit_fair_value_whatif.py`).
+오너 결정: ④a 적용, ④b 미적용(정유사처럼 마진이 업종보다 낮은 회사의 값을 오히려 올림), ⑤ 규칙 유지(⑤a는 3배 이상을 18→26으로 늘리고,
+⑤b는 전체를 낮추며, 둘 다 반도체 0.19배를 거의 못 바꿈) + 반도체 과소 원인 별도 조사.
+④a 구현: `fair_value_case.COMMODITY_INDUSTRIES`(10개 업종)는 성장률 평균에 업종 5년 성장률 대신 무위험금리를 쓴다.
+이 업종의 케이스 이름에는 `_cyclical`이 붙어, 옛 규칙으로 저장된 케이스가 재사용되지 않는다(다른 종목의 이름은 그대로).
+측정상 귀금속 중앙값 4.44→2.81배, 워치리스트 3배 이상 18→12개. 보수적 케이스(`conservative_case`)는 바꾸지 않았다.

@@ -22,6 +22,7 @@ from apps.api.services.corporate_statement_metrics import (
 )
 from apps.api.services.equity_bridge import load_equity_bridge
 from apps.api.services.fair_value_case import (
+    COMMODITY_INDUSTRIES,
     FairValueRefused,
     build_fair_value_case,
     company_revenue_cagr,
@@ -89,7 +90,7 @@ def generate_fair_value_case_for_ticker(
         return None, False, None, reason
 
     latest_year = baseline.source_years[-1]
-    name = fair_value_case_name(ticker, vintage, latest_year)
+    name = fair_value_case_name(ticker, vintage, latest_year, cyclical=industry.name in COMMODITY_INDUSTRIES)
     existing = next((c["id"] for c in list_cases() if c["case_name"] == name), None)
     if existing is not None:
         return existing, False, vintage, None
