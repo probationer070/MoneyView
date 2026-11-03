@@ -58,13 +58,13 @@ export default function DecisionsPage() {
           render NOTHING that implies a count: "0 decisions" or "none recorded
           yet" on a failed request states an answer the request never returned. */}
       {decisionsQuery.isLoading && (
-        <p role="status" className="text-[var(--ink-secondary)]">Loading decisions…</p>
+        <p role="status" className="text-[var(--ink-secondary)]">{t("decisions.status.loading")}</p>
       )}
       {decisionsQuery.isError && (
-        <p role="alert" className="type-body text-[var(--status-error-ink)]">Could not load decisions.</p>
+        <p role="alert" className="type-body text-[var(--status-error-ink)]">{t("decisions.status.error")}</p>
       )}
       {!decisionsQuery.isLoading && !decisionsQuery.isError && decisions.length === 0 && (
-        <p className="text-[var(--ink-secondary)]">No decisions recorded yet.</p>
+        <p className="text-[var(--ink-secondary)]">{t("decisions.status.empty")}</p>
       )}
       {!decisionsQuery.isLoading && !decisionsQuery.isError && (
         <DecisionList decisions={decisions} />

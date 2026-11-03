@@ -424,6 +424,36 @@ export const en = {
     confirmDelete: "Delete this decision", deletePrompt: "Delete this decision? This cannot be undone.",
     edited: "Edited · {time}",
     saveFailed: "Could not save the change. Try again.", deleteFailed: "Could not delete the decision. Try again.",
+    status: {
+      loading: "Loading decisions…",
+      error: "Could not load decisions.",
+      empty: "No decisions recorded yet.",
+    },
+    form: {
+      heading: "Record a decision",
+      ticker: "Ticker",
+      submit: "Record decision",
+      submitting: "Recording…",
+      tickerRequired: "A ticker is required.",
+      memoRequired: "A memo is required: a decision without a reason is a snapshot.",
+      failed: "Could not record the decision.",
+    },
+    list: {
+      gap: "Gap to fair value at decision",
+      noHorizon: "no horizon",
+      move: "Price move",
+      span: "{from} → {to}",
+      since: "from {from}",
+    },
+    scatter: {
+      title: "Gap at decision against price move since",
+      coverage: "{plotted} of {total} decisions plotted{excluded}.",
+      awaitingBar: "{n} awaiting a later price bar",
+      noFigures: "{n} recorded without figures",
+      axisGap: "Gap at decision (no horizon)",
+      axisMove: "Price move since",
+      series: "Decisions",
+    },
   },
   monteCarlo: {
     guide: {

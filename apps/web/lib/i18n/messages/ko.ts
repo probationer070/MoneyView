@@ -427,6 +427,36 @@ export const ko: Messages = {
     confirmDelete: "이 기록 삭제", deletePrompt: "이 기록을 삭제하시겠습니까? 되돌릴 수 없습니다.",
     edited: "수정됨 · {time}",
     saveFailed: "수정하지 못했습니다. 다시 시도하십시오.", deleteFailed: "삭제하지 못했습니다. 다시 시도하십시오.",
+    status: {
+      loading: "의사결정을 불러오는 중입니다…",
+      error: "의사결정을 불러오지 못했습니다.",
+      empty: "아직 기록된 의사결정이 없습니다.",
+    },
+    form: {
+      heading: "의사결정 기록하기",
+      ticker: "종목",
+      submit: "기록하기",
+      submitting: "기록하는 중…",
+      tickerRequired: "종목을 입력하십시오.",
+      memoRequired: "메모는 필수입니다. 이유 없는 기록은 그저 스냅숏입니다.",
+      failed: "기록하지 못했습니다. 다시 시도하십시오.",
+    },
+    list: {
+      gap: "결정 시점 적정가 괴리",
+      noHorizon: "기간 없음",
+      move: "가격 변화",
+      span: "{from} → {to}",
+      since: "{from}부터",
+    },
+    scatter: {
+      title: "결정 시점 괴리 대비 이후 가격 변화",
+      coverage: "전체 {total}건 중 {plotted}건을 표시했습니다{excluded}.",
+      awaitingBar: "{n}건은 이후 가격 봉을 기다리는 중",
+      noFigures: "{n}건은 수치 없이 기록됨",
+      axisGap: "결정 시점 괴리 (기간 없음)",
+      axisMove: "이후 가격 변화",
+      series: "결정",
+    },
   },
   monteCarlo: {
     guide: {

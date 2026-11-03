@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { fetchApi } from "@/lib/api";
 import { TickerSearch, type TickerSearchItem } from "@/components/ui/TickerSearch";
+import { useT } from "@/lib/i18n/locale";
 import { DECISION_ACTIONS, type DecisionAction } from "../decisionTypes";
 
 /**
@@ -13,6 +14,7 @@ import { DECISION_ACTIONS, type DecisionAction } from "../decisionTypes";
  * The request model is extra="forbid", so adding a field here is a 422.
  */
 export function RecordDecisionForm({ watchlist = [] }: { watchlist?: TickerSearchItem[] }) {
+  const t = useT();
   const queryClient = useQueryClient();
   const [ticker, setTicker] = useState("");
   const [action, setAction] = useState<DecisionAction>("buy");
@@ -34,18 +36,18 @@ export function RecordDecisionForm({ watchlist = [] }: { watchlist?: TickerSearc
       setError(null);
     },
     onError: (err) =>
-      setError(err instanceof Error ? err.message : "Could not record the decision."),
+      setError(err instanceof Error ? err.message : t("decisions.form.failed")),
   });
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!ticker.trim()) {
-      setError("A ticker is required.");
+      setError(t("decisions.form.tickerRequired"));
       return;
     }
     if (!memo.trim()) {
       // Mirrors the server's own rule so the user sees it without a round trip.
-      setError("A memo is required: a decision without a reason is a snapshot.");
+      setError(t("decisions.form.memoRequired"));
       return;
     }
     setError(null);
@@ -54,7 +56,7 @@ export function RecordDecisionForm({ watchlist = [] }: { watchlist?: TickerSearc
 
   return (
     <section className="mb-6 border border-[var(--line)] bg-[var(--surface-raised)] p-5">
-      <h2 className="type-panel-title text-[var(--ink)]">Record a decision</h2>
+      <h2 className="type-panel-title text-[var(--ink)]">{t("decisions.form.heading")}</h2>
       {/* A real <form>, not a click handler on a bare button: Enter submits,
           the controls are announced as a group, and the browser supplies the
           semantics instead of custom interaction code. */}
@@ -64,7 +66,7 @@ export function RecordDecisionForm({ watchlist = [] }: { watchlist?: TickerSearc
             a typo produced a decision row against a symbol that does not exist. */}
         <TickerSearch
           id="decision-ticker"
-          label="Ticker"
+          label={t("decisions.form.ticker")}
           value={ticker}
           onChange={setTicker}
           onSelect={setTicker}
@@ -72,7 +74,7 @@ export function RecordDecisionForm({ watchlist = [] }: { watchlist?: TickerSearc
           className="min-w-[14rem]"
         />
         <label className="flex flex-col gap-1 type-small text-[var(--ink-secondary)]">
-          Action
+          {t("decisions.action")}
           <select
             value={action}
             onChange={(event) => setAction(event.target.value as DecisionAction)}
@@ -84,7 +86,7 @@ export function RecordDecisionForm({ watchlist = [] }: { watchlist?: TickerSearc
           </select>
         </label>
         <label className="flex flex-1 flex-col gap-1 type-small text-[var(--ink-secondary)]">
-          Memo
+          {t("decisions.memo")}
           <input
             value={memo}
             onChange={(event) => setMemo(event.target.value)}
@@ -97,7 +99,7 @@ export function RecordDecisionForm({ watchlist = [] }: { watchlist?: TickerSearc
           aria-busy={mutation.isPending}
           className="rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-1.5 type-body text-[var(--ink)] disabled:opacity-50"
         >
-          {mutation.isPending ? "Recording…" : "Record decision"}
+          {mutation.isPending ? t("decisions.form.submitting") : t("decisions.form.submit")}
         </button>
       </form>
       {error && (

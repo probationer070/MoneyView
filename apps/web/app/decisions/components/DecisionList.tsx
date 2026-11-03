@@ -22,19 +22,20 @@ import { DECISION_ACTIONS, type DecisionAction, type DecisionRow } from "../deci
  * their bases is what would invite someone to subtract one from the other.
  */
 function FigurePair({ decision }: { decision: DecisionRow }) {
+  const t = useT();
   const { outcome } = decision;
   return (
     <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
       <div className="border border-[var(--line)] p-3">
         <p className="type-small text-[var(--ink-secondary)]">
-          Gap to fair value at decision
+          {t("decisions.list.gap")}
         </p>
         <p className="type-mono text-[var(--ink)]">
           {decision.dcf_implied_return_pct === null
             ? "—"
             : fmtPct(decision.dcf_implied_return_pct, 1)}
         </p>
-        <p className="type-small text-[var(--ink-muted)]">no horizon</p>
+        <p className="type-small text-[var(--ink-muted)]">{t("decisions.list.noHorizon")}</p>
         {decision.figures_unavailable_reason && (
           <p className="mt-1 type-small text-[var(--ink-secondary)]">
             {decision.figures_unavailable_reason}
@@ -43,14 +44,14 @@ function FigurePair({ decision }: { decision: DecisionRow }) {
       </div>
 
       <div className="border border-[var(--line)] p-3">
-        <p className="type-small text-[var(--ink-secondary)]">Price move</p>
+        <p className="type-small text-[var(--ink-secondary)]">{t("decisions.list.move")}</p>
         <p className="type-mono text-[var(--ink)]">
           {outcome.price_move_pct === null ? "—" : fmtPct(outcome.price_move_pct, 1)}
         </p>
         <p className="type-small text-[var(--ink-muted)]">
           {outcome.price_date
-            ? `${outcome.decided_on} → ${outcome.price_date}`
-            : `from ${outcome.decided_on}`}
+            ? t("decisions.list.span", { from: outcome.decided_on, to: outcome.price_date })
+            : t("decisions.list.since", { from: outcome.decided_on })}
         </p>
         {outcome.reason && (
           <p className="mt-1 type-small text-[var(--ink-secondary)]">{outcome.reason}</p>

@@ -3,6 +3,7 @@
 import { CartesianGrid, ReferenceLine, Scatter, ScatterChart, Tooltip, XAxis, YAxis } from "recharts";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 import { CHART_COLORS, GRID_STYLE, fmtPctTick, withAxisProps, withTooltipProps } from "@/lib/chartConfig";
+import { useT } from "@/lib/i18n/locale";
 import { partitionDecisions, type DecisionPoint } from "../decisionChartData";
 import type { DecisionRow } from "../decisionTypes";
 
@@ -46,6 +47,7 @@ function DecisionDot({ cx, cy, payload }: { cx?: number; cy?: number; payload?: 
  * and the reason for the custom shape are documented on `DecisionDot` above.
  */
 export function DecisionOutcomeScatter({ decisions }: { decisions: DecisionRow[] }) {
+  const t = useT();
   const { points, total, outcomeUnavailable, figuresUnavailable } = partitionDecisions(decisions);
 
   // The partition reports STATES and counts; the wording lives here. Keeping
@@ -53,14 +55,16 @@ export function DecisionOutcomeScatter({ decisions }: { decisions: DecisionRow[]
   // data-semantics module rather than a presentation one.
   const excluded: string[] = [];
   if (outcomeUnavailable > 0) {
-    excluded.push(`${outcomeUnavailable} awaiting a later price bar`);
+    excluded.push(t("decisions.scatter.awaitingBar", { n: outcomeUnavailable }));
   }
   if (figuresUnavailable > 0) {
-    excluded.push(`${figuresUnavailable} recorded without figures`);
+    excluded.push(t("decisions.scatter.noFigures", { n: figuresUnavailable }));
   }
-  const coverage =
-    `${points.length} of ${total} decisions plotted` +
-    (excluded.length > 0 ? `; ${excluded.join("; ")}` : "") + ".";
+  const coverage = t("decisions.scatter.coverage", {
+    plotted: points.length,
+    total,
+    excluded: excluded.length > 0 ? `; ${excluded.join("; ")}` : "",
+  });
 
   return (
     <section
@@ -70,7 +74,7 @@ export function DecisionOutcomeScatter({ decisions }: { decisions: DecisionRow[]
       className="mb-6 border border-[var(--line)] bg-[var(--surface-raised)] p-5"
     >
       <h2 id="decision-scatter-title" className="type-panel-title text-[var(--ink)]">
-        Gap at decision against price move since
+        {t("decisions.scatter.title")}
       </h2>
       {/* Rendered as text, not only in a hover tooltip: the chart's meaning --
           including what it could NOT plot -- must be readable without pointing
@@ -85,19 +89,19 @@ export function DecisionOutcomeScatter({ decisions }: { decisions: DecisionRow[]
             <XAxis
               type="number"
               dataKey="gapPct"
-              name="Gap at decision (no horizon)"
+              name={t("decisions.scatter.axisGap")}
               {...withAxisProps({ tickFormatter: (value: number | string) => fmtPctTick(Number(value), 0) })}
             />
             <YAxis
               type="number"
               dataKey="movePct"
-              name="Price move since"
+              name={t("decisions.scatter.axisMove")}
               {...withAxisProps({ tickFormatter: (value: number | string) => fmtPctTick(Number(value), 0) })}
             />
             <ReferenceLine x={0} stroke="var(--grid)" />
             <ReferenceLine y={0} stroke="var(--grid)" />
             <Tooltip {...withTooltipProps({ cursor: { strokeDasharray: "3 3" } })} />
-            <Scatter data={points} name="Decisions" shape={DecisionDot} />
+            <Scatter data={points} name={t("decisions.scatter.series")} shape={DecisionDot} />
           </ScatterChart>
         </ResponsiveChart>
       </div>
