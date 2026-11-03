@@ -112,3 +112,20 @@ test.describe("ko shared error state", () => {
     await expect(page.getByRole("button", { name: "다시 시도", exact: true })).toBeVisible();
   });
 });
+
+test.describe("ko-KR browser on the ungated splash", () => {
+  test.use({ locale: "ko-KR" });
+  test("a stored Korean locale hydrates the startup splash without a mismatch", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.addInitScript(() => window.localStorage.setItem("moneyview.locale", "ko"));
+    await page.route("**/api/v1/health", (route) => route.abort());
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "분석 엔진을 시작하는 중입니다..." })).toBeVisible();
+    const mismatches = errors.filter((text) => /hydrat|did not match|server rendered|Text content does not match/i.test(text));
+    expect(mismatches, `hydration messages:\n${mismatches.join("\n")}`).toEqual([]);
+  });
+});
