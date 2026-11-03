@@ -26,6 +26,7 @@ import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ScanReveal } from "@/components/ui/ScanReveal";
 import { Tabs } from "@/components/ui/Tabs";
+import { MONTE_CARLO_GUIDE_ID, MonteCarloGuide } from "./components/MonteCarloGuide";
 import { useT } from "@/lib/i18n/locale";
 import { useTabState } from "@/lib/tabState";
 import { isMonteCarloTab, MONTE_CARLO_TAB_KEY, MONTE_CARLO_TABS, type MonteCarloTab } from "./lib/tabs";
@@ -136,6 +137,8 @@ export default function MonteCarloPage() {
   // Page-level state owns worker lifecycle, tab selection, and all simulation inputs/results.
   const [stored, setStored] = useTabState<string>(MONTE_CARLO_TAB_KEY, "path");
   const activeTab = isMonteCarloTab(stored) ? stored : "path";
+  // Closed on every visit, like PageGuide.
+  const [guideOpen, setGuideOpen] = useState(false);
   const [input, setInput] = useState<PathSimulationInput>(defaultInput);
   const [valuationInput, setValuationInput] = useState<ValuationInput>(defaultValuationInput);
   const [correlationInput, setCorrelationInput] = useState<CorrelationInput>(defaultCorrelationInput);
@@ -734,16 +737,28 @@ export default function MonteCarloPage() {
         subtitle={<span className="block truncate">{t("monteCarlo.subtitle")}</span>}
       />
 
-      <Tabs
-        ariaLabel={t("monteCarlo.tabs.aria")}
-        idPrefix="simulation-"
-        className="shrink-0 [contain:inline-size]"
-        items={MONTE_CARLO_TABS.map((key) => ({ key, label: t(`monteCarlo.tabs.${key}`) }))}
-        activeKey={activeTab}
-        onChange={(key) => {
-          if (isMonteCarloTab(key)) changeTab(key);
-        }}
-      />
+      <div className="flex shrink-0 items-center gap-3">
+        <Tabs
+          ariaLabel={t("monteCarlo.tabs.aria")}
+          idPrefix="simulation-"
+          className="min-w-0 flex-1 [contain:inline-size]"
+          items={MONTE_CARLO_TABS.map((key) => ({ key, label: t(`monteCarlo.tabs.${key}`) }))}
+          activeKey={activeTab}
+          onChange={(key) => {
+            if (isMonteCarloTab(key)) changeTab(key);
+          }}
+        />
+        <button
+          type="button"
+          data-testid="monte-carlo-guide-toggle"
+          aria-expanded={guideOpen}
+          aria-controls={guideOpen ? MONTE_CARLO_GUIDE_ID : undefined}
+          onClick={() => setGuideOpen((open) => !open)}
+          className="type-small shrink-0 text-[var(--ink-muted)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand-text)]"
+        >
+          {t("guide.summary")}
+        </button>
+      </div>
 
       {/* Each tab renders through a dedicated section component. */}
       <section
@@ -751,8 +766,9 @@ export default function MonteCarloPage() {
         role="tabpanel"
         aria-labelledby={`simulation-tab-${activeTab}`}
         data-testid="mc-panel"
-        className="flex min-h-0 flex-1 flex-col"
+        className="relative flex min-h-0 flex-1 flex-col"
       >
+      {guideOpen ? <MonteCarloGuide /> : null}
       <ScanReveal trigger={activeTab} className="flex min-h-0 flex-1 flex-col" bodyClassName="flex min-h-0 flex-1 flex-col">
       {activeTab === "path" ? (
         <PathSimulationSection

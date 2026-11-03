@@ -6,6 +6,7 @@ import { fetchApi } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import { RecordsSyncStatus, useRecordsSyncStatus } from "@/app/components/RecordsSyncStatus";
+import { DecisionsGuide } from "./components/DecisionsGuide";
 import { DecisionList } from "./components/DecisionList";
 import { DecisionOutcomeScatter } from "./components/DecisionOutcomeScatter";
 import { RecordDecisionForm } from "./components/RecordDecisionForm";
@@ -47,6 +48,7 @@ export default function DecisionsPage() {
         title={t("decisions.title")}
         subtitle={t("decisions.subtitle")}
       />
+      <DecisionsGuide />
       <RecordsSyncStatus status={recordsSyncQuery.data} />
       <RecordDecisionForm watchlist={watchlistQuery.data ?? []} />
       {!decisionsQuery.isLoading && !decisionsQuery.isError && (

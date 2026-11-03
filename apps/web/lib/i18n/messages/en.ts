@@ -97,6 +97,50 @@ export const en = {
       plausibleMargin: "target operating margin",
       plausibleGrowth: "revenue growth, years 1–5",
     },
+    guide: {
+      about: {
+        title: "What this screen is",
+        body: "Choose a ticker and it shows two things. The top is the Damodaran-style fair value, and below it is an evidence panel of four price-signal rows. Both are evidence for your judgement, not an instruction to buy or sell. The ticker box suggests your watchlist.",
+      },
+      fairValue: {
+        title: "Reading the fair value",
+        case: "The fair value is the value per share of a 10-year case built from the company's statements and industry averages. In years 1-5 revenue grows at one rate; in years 6-10 that rate fades gradually to the risk-free rate.",
+        price: "The price is the latest stored close, and its date is printed below. The gap to price is the fair value minus the price, divided by the price. The floor is the value per share of a conservative case built the same way.",
+        implied: "The price line shows the year 1-5 growth rate at which the fair value on the same path would equal the price, and the model's own rate in brackets. If that rate lies outside the search range, it only says so.",
+        assumptions: "Opening the assumptions lists each input with the claim behind it. The link below opens the case, where the assumptions can be changed.",
+      },
+      plausible: {
+        title: "The may-be-high-for-its-industry badge",
+        compare: "It compares the EV/Sales that the fair value implies with the EV/Sales of the same Damodaran industry. EV/Sales is enterprise value divided by base-year revenue.",
+        flag: "When the ratio is above 3 times the industry's, a badge appears beside the fair value and a sentence with the comparison appears below it.",
+        causes: "The causes are at most two. For each of target operating margin and year 1-5 revenue growth, the page moves only that input to the industry's value, recalculates, and states the share of the value that move removes.",
+        uncapped: "The fair value is never cut or capped because of this badge. The figure on screen is the figure the model used, and the badge is a warning to look at the inputs again. No badge does not mean the value is reasonable for its industry: there is no badge either when the industry has no EV/Sales to compare.",
+      },
+      method: {
+        title: "The 10-year case and the 5-year DCF",
+        body: "The fair value on this screen comes from a 10-year case model. The DCF value on the Corporate screen is a separate 5-year DCF. The two are methods side by side, not one checking the other, so they can differ.",
+        gap: "The gap-to-fair-value row in the evidence panel uses the conservative case, so its basis differs from the fair value above.",
+      },
+      refusal: {
+        title: "Not computed and no fair value",
+        notPositive: "Not computed means the case values a share at zero or below. After reinvestment the operating value does not cover net debt and other claims, and this wording replaces the figure so that a negative price is not read as a target.",
+        none: "No fair value means the model could not produce one. The reason follows in the server's own words, which may be in English. For example, if the statements and the price are in different currencies, a value per share would mix the two, so none is computed.",
+        rows: "The evidence panel works the same way. A row that cannot be computed shows its reason in place of a value and is never filled with a zero or left blank.",
+      },
+      panel: {
+        title: "The evidence panel",
+        order: "The four rows always come in the same order. They are not sorted by size, carry no score or badge, and use no colour to say good or bad.",
+        drawdown: "Drawdown from peak is the fall from the peak of a recent window of trading days to the current price, compared with the mean of similar stocks measured over the same window.",
+        volume: "Volume vs baseline is the recent mean volume divided by the mean volume of a longer baseline period.",
+        pe: "Trailing PE is the price divided by the latest profitable annual diluted EPS, compared with the Damodaran industry average.",
+        dcfGap: "Gap to fair value is the total gap between the conservative case's value per share and the price. It has no time horizon, so do not read it as an annual return.",
+        source: "Under every row are its basis and source. The bases differ from row to row, so do not compare rows directly. The sentence at the top is the same fixed wording for every ticker.",
+      },
+      source: {
+        title: "Where the data comes from",
+        body: "Prices and volume are the daily bars stored locally, statements are the stored annual statements, and industry figures are Damodaran's industry data. This screen reads stored data, and a case built from the same ticker and the same data is stored once and reused.",
+      },
+    },
     title: "Valuation",
     subtitle: "One evidence panel per ticker. Every row states the basis it was compared against, and a row that cannot be computed says why.",
     tickerLabel: "Ticker",
@@ -154,6 +198,36 @@ export const en = {
     noneFor: "No stored cases for {filter}.",
   },
   decisions: {
+    guide: {
+      about: {
+        title: "What this screen is",
+        body: "A log of what you believed about a ticker, when, and why. A record is a ticker, an action and a memo, and the action is one of buy, sell, watch or pass. The memo is required, because a record without a reason is only a snapshot.",
+        order: "The most recent record is at the top.",
+      },
+      record: {
+        title: "What is saved when you record",
+        server: "You enter only the ticker, the action and the memo. Figures such as the price and the model's value are saved by the server at the moment of recording, so a stale or rounded number from an old screen cannot get in.",
+        unavailable: "If the model cannot value the ticker, the reason is saved in place of the figures and the record is kept. That is the case when there is no stored price, when free cash flow is zero or negative, or when net debt could not be bridged.",
+      },
+      card: {
+        title: "Reading a card",
+        head: "The top of a card shows the ticker, the action and the date recorded, and an edited mark with a time if it was ever corrected. The memo is below.",
+        gap: "Gap to fair value at decision is how many percent the model's value was above or below the price when you recorded. It comes from the same DCF as the Corporate comparison table and has no time horizon.",
+        move: "Price move is the change from the day you recorded to the latest stored close, with both dates printed. If no close exists after the record yet, it says so in a sentence instead of showing 0%.",
+        pair: "The two figures share a unit and nothing else. One is a total gap with no horizon and the other is a change over a stated period. Do not subtract or add one to the other.",
+      },
+      scatter: {
+        title: "The scatter chart",
+        body: "The horizontal axis is the gap at the time of the decision, the vertical axis is the price move since, and each dot is one record. The two lines at zero only divide where the sign changes. There is deliberately no trend line or accuracy score, because that would claim the two axes can be compared.",
+        coverage: "A dot needs both values. Records that cannot be drawn are counted in the caption, which tells apart those waiting for a later close from those recorded without figures.",
+      },
+      edit: {
+        title: "Editing and deleting",
+        edit: "Editing can change only the action and the memo. The ticker, the time recorded and the saved figures do not change. A corrected card shows an edited mark and the time of the correction.",
+        delete: "Deleting asks once more inside the card and cannot be undone.",
+        sync: "With records sync on, deleting writes a tombstone first, so the other PC removes the record too instead of sending it back. With sync off no tombstone is left. When sync is on, one line at the top shows its status.",
+      },
+    },
     title: "Decision Log",
     subtitle: "What was believed about a ticker, when, and why. Figures are captured by the server at record time and never change; action and memo can be corrected, and a corrected entry shows when.",
     edit: "Edit", delete: "Delete", save: "Save", cancel: "Cancel", action: "Action", memo: "Memo",
@@ -162,6 +236,54 @@ export const en = {
     saveFailed: "Could not save the change. Try again.", deleteFailed: "Could not delete the decision. Try again.",
   },
   monteCarlo: {
+    guide: {
+      about: {
+        title: "What this screen is",
+        body: "An experiment screen that runs random simulations in your browser to show the range of outcomes. It shows the spread of possible results, not a single forecast. The path simulation is the core; risk analysis and return distribution read its result in other ways.",
+        run: "The calculation runs in this browser. Only the corporate valuation tab looks up a current price from the server, once you enter a ticker. The seed is fixed, so running the same inputs again gives the same result.",
+        before: "When you change an input and run again, a card whose value changed shows the previous value beside the new one.",
+      },
+      path: {
+        title: "Path tab",
+        model: "It builds many paths in which the starting investment moves up and down at random every trading day. Expected return and volatility set the basic movement, and the monthly jump probability and intensity add occasional drop shocks. The size of a drop scales with volatility.",
+        chart: "The path chart draws only a sample of all paths. The percentile cone ranks the results at each point in time and shows the 5%-95%, 10%-90% and 25%-75% bands and the median. The wider the band, the greater the uncertainty.",
+        figures: "Median terminal value is the median of the final values. Expected return compares that median with the principal. Loss probability is the share of paths that end below the principal. The Sharpe ratio is annualized and uses the risk-free rate printed on the card.",
+        mode: "There are two run modes. Interactive keeps a larger path sample; Large Summary keeps only percentile summaries, the final distribution and a small path sample. A run with many simulations is promoted to Large Summary automatically.",
+      },
+      risk: {
+        title: "Risk tab",
+        body: "It reads the same result as the Path tab from the loss side. Run the Path tab first.",
+        var: "VaR 95% is the loss rate that 95% of simulations did not exceed; VaR 99% works the same way. CVaR 95% is the average loss over only the cases at or beyond VaR 95%, which shows how deep the bad tail is.",
+        others: "Maximum drawdown is the largest peak-to-trough fall of the median path. The Sortino ratio is return measured against only the movement of results that fell below the principal. A negative skewness means the large-loss tail is longer.",
+        chart: "In the distribution chart, loss buckets and gain buckets are separated by the legend's colours, with the principal line and the VaR and CVaR positions marked. The percentile view shows the final value as one bar per percentile.",
+      },
+      distribution: {
+        title: "Distribution tab",
+        figures: "Mean return, standard deviation, kurtosis and the maximum and minimum return all describe the final return against the principal.",
+        histogram: "The histogram is the distribution of those returns, and the overlaid curve is a normal distribution with the same mean and standard deviation. If the ends are thicker than the curve, extreme outcomes occur more often than a normal distribution would give.",
+        cdf: "The cumulative distribution comparison puts the simulated cumulative distribution beside the normal one. The further apart the two lines, the more the result departs from a normal assumption.",
+        kurtosis: "The kurtosis card reads 3 for a normal distribution. The excess kurtosis in the statistical summary on the Risk tab is that value minus 3, so it reads 0 for a normal distribution.",
+      },
+      valuation: {
+        title: "Corporate valuation tab",
+        model: "It estimates one stock's value per share as a distribution, not a single point. Base EPS grows over the forecast period and in the last year at the terminal growth rate; the EPS of that last year times a target PER is added, all discounted to today. It is a simple model that discounts EPS in place of cash flow.",
+        random: "Growth, the discount rate and the target PER are shaken at random by the uncertainty you enter, and the same calculation is repeated many times. The target PER is centred on the current price divided by base EPS. Growth and the discount rate have floors, and terminal growth is held below the discount rate.",
+        figures: "Median fair value is the 50th percentile of the results. Undervaluation probability is the share of results above the current price, and upside potential compares the median with the current price. The 80% interval runs from P10 to P90. The Z-score in the statistics table is the gap between the mean and the current price divided by the standard deviation.",
+        price: "Amounts are in US dollars with two decimals. Enter a ticker and leave the field and the current price is looked up and filled in; you can still edit it afterwards.",
+        other: "This tab uses a simple model of EPS and PER only. It is a different method from the Damodaran-style fair value on the Valuation screen.",
+      },
+      correlation: {
+        title: "Correlation tab",
+        model: "Enter each asset's expected return and volatility and a table of correlations between assets to see the diversification effect. It builds many portfolios with random weights, calculates return and risk with the correlations applied, and plots them as the efficient frontier. The portfolio with the highest Sharpe ratio is the optimal one and is marked apart. The risk-free rate behind this Sharpe ratio is fixed at 3%.",
+        figures: "The cards are the optimal portfolio's expected return and volatility, the diversification effect and the Sharpe ratio. The diversification effect is the simple average of the individual asset volatilities minus the optimal portfolio's volatility.",
+        sensitivity: "Spearman rho sensitivity is a rank correlation showing how far each asset's return moved with the optimal portfolio's return across scenarios. Positive exposure is red and negative exposure is blue, deeper when stronger. The heatmap draws the correlation table you entered as it is.",
+      },
+      state: {
+        title: "Status and warnings",
+        body: "The status line above a tab says one of: no analysis run yet, running, run failed, run canceled, or results ready.",
+        warnings: "Values that cannot be charted are dropped and a warning count is shown. If no usable value is left, the panel gives the reason in place of a blank chart.",
+      },
+    },
     title: "Simulation Lab",
     subtitle: "Path, risk, distribution, valuation and correlation simulations",
     units: {

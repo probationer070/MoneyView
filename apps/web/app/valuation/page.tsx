@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import { RecordsSyncStatus, useRecordsSyncStatus } from "@/app/components/RecordsSyncStatus";
 import { casesApi } from "@/app/cases/casesApi";
+import { ValuationGuide } from "./components/ValuationGuide";
 import { FairValueBlock } from "./components/FairValueBlock";
 import { TickerPicker } from "./components/TickerPicker";
 import { VerdictPanelView } from "./components/VerdictPanel";
@@ -70,6 +71,7 @@ export default function ValuationPage() {
         title={t("valuation.title")}
         subtitle={t("valuation.subtitle")}
       />
+      <ValuationGuide />
       <RecordsSyncStatus status={recordsSyncQuery.data} />
 
       <TickerPicker items={watchlistQuery.data ?? []} onSubmit={setTicker} />

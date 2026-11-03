@@ -1,17 +1,21 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { API_PREFIX } from "./helpers/mockUtils";
+import { mockDecisionsApi } from "./helpers/decisionsPageMock";
 import { mockMarketPageApi } from "./helpers/marketPageMock";
+import { installMonteCarloWorker } from "./helpers/monteCarloWorkerMock";
 import { expectNoPageScroll } from "./helpers/noPageScroll";
 import { mockPortfolioPageApi } from "./helpers/portfolioPageMock";
+import { mockValuationApi } from "./helpers/valuationPageMock";
 import { en } from "../../lib/i18n/messages/en";
 import { ko } from "../../lib/i18n/messages/ko";
 
-// "How to read this screen" on the market overview, the portfolio and the news page (same idea as
+// "How to read this screen" on the market overview, the portfolio, news, Monte Carlo, decisions and valuation pages (same idea as
 // signals-guide.spec.ts and corporate-guide.spec.ts). Closed by default, Korean in ko-KR, and the
 // one-screen / shell layouts do not start scrolling the page.
 
-// Words that stay Latin in Korean copy: tickers, finance acronyms, a key name, the product name.
-const LATIN_OK = /\b(KOSPI|ETF|WACC|DCF|ROIC|UTC|Esc|MoneyView)\b/g;
+// Words that stay Latin in Korean copy: tickers, finance acronyms (also the labels the UI keeps in Latin), a key name,
+// the product name, and the decision actions, which the Decision Log shows as stored.
+const LATIN_OK = /\b(KOSPI|ETF|WACC|DCF|ROIC|UTC|Esc|MoneyView|VaR|CVaR|EPS|PER|buy|sell|watch|pass)\b/g;
 
 function guideTitles(guide: Record<string, unknown>): string[] {
   return Object.values(guide).flatMap((section) => {
@@ -93,5 +97,58 @@ test.describe("page guides, in Korean", () => {
     await guide.locator("summary").click();
     await expect(guide.getByText("기사 출처", { exact: true })).toBeVisible();
     await expectKoreanOnly(guide, en.news.guide, ko.news.guide);
+  });
+
+  test("monte carlo: a closed toggle in the tab row opens a guide over the panel without scrolling the page", async ({ page }: { page: Page }) => {
+    await installMonteCarloWorker(page);
+    await page.goto("/monte-carlo", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "시뮬레이션 랩", exact: true })).toBeVisible({ timeout: 60_000 });
+    const toggle = page.getByTestId("monte-carlo-guide-toggle");
+    await expect(toggle).toHaveText("이 화면 읽는 법");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByTestId("monte-carlo-guide")).toHaveCount(0);
+    await page.evaluate(() => document.fonts.ready);
+    await expectNoPageScroll(page, "monte carlo, guide closed");
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const guide = page.getByTestId("monte-carlo-guide");
+    await expect(guide.getByText("경로 탭", { exact: true })).toBeVisible();
+    await expectKoreanOnly(guide, en.monteCarlo.guide, ko.monteCarlo.guide);
+    await expectNoPageScroll(page, "monte carlo, guide open");
+    await page.getByRole("tab", { name: "상관관계 모형", exact: true }).click();
+    await expect(page.getByTestId("monte-carlo-guide")).toBeVisible();
+    await expectNoPageScroll(page, "monte carlo, guide open on another tab");
+
+    await toggle.click();
+    await expect(page.getByTestId("monte-carlo-guide")).toHaveCount(0);
+  });
+
+  test("decisions: a closed guide under the header opens with Korean sections", async ({ page }: { page: Page }) => {
+    await mockDecisionsApi(page);
+    await page.goto("/decisions", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "의사결정 기록", exact: true })).toBeVisible({ timeout: 60_000 });
+    const guide = page.getByTestId("decisions-guide");
+    await expect(guide.locator("summary")).toHaveText("이 화면 읽는 법");
+    await expect(guide).not.toHaveAttribute("open", "");
+    await expect(guide.getByText("수정과 삭제", { exact: true })).toBeHidden();
+
+    await guide.locator("summary").click();
+    await expect(guide.getByText("수정과 삭제", { exact: true })).toBeVisible();
+    await expectKoreanOnly(guide, en.decisions.guide, ko.decisions.guide);
+  });
+
+  test("valuation: a closed guide under the header opens with Korean sections", async ({ page }: { page: Page }) => {
+    await mockValuationApi(page);
+    await page.goto("/valuation", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "가치평가", exact: true })).toBeVisible({ timeout: 60_000 });
+    const guide = page.getByTestId("valuation-guide");
+    await expect(guide.locator("summary")).toHaveText("이 화면 읽는 법");
+    await expect(guide).not.toHaveAttribute("open", "");
+    await expect(guide.getByText("업종 대비 과대 가능 배지", { exact: true })).toBeHidden();
+
+    await guide.locator("summary").click();
+    await expect(guide.getByText("업종 대비 과대 가능 배지", { exact: true })).toBeVisible();
+    await expectKoreanOnly(guide, en.valuation.guide, ko.valuation.guide);
   });
 });

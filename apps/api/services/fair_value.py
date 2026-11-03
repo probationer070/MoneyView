@@ -42,6 +42,7 @@ from apps.api.services.valuation_case import CaseNotFound, create_case, list_cas
 
 _ENDPOINT = "fair_value"
 # A fair-value EV/Sales above this multiple of the industry's is flagged (owner draft, 2026-11-01 plan §10).
+# The valuation page guide states it in prose (`valuation.guide.plausible.flag`, en and ko): change both.
 PLAUSIBILITY_K = 3.0
 
 
