@@ -10,6 +10,7 @@ import { useT } from "@/lib/i18n/locale";
 import { RecordsSyncStatus, useRecordsSyncStatus } from "@/app/components/RecordsSyncStatus";
 import { casesApi, retryUnlessRefused } from "./casesApi";
 import { CaseTable } from "./components/CaseTable";
+import { CasesGuide } from "./components/CasesGuide";
 import { QueryStatus } from "./components/Section";
 
 export default function CasesPage({ searchParams }: { searchParams: Promise<{ ticker?: string }> }) {
@@ -47,6 +48,7 @@ export default function CasesPage({ searchParams }: { searchParams: Promise<{ ti
         title={t("cases.title")}
         subtitle={t("cases.subtitle")}
       />
+      <div className="mb-4"><CasesGuide /></div>
       <RecordsSyncStatus status={recordsSyncQuery.data} />
       <label className="mb-4 flex max-w-xs flex-col gap-1 type-small text-[var(--ink-secondary)]">
         {t("cases.tickerFilter")}

@@ -19,6 +19,7 @@ from apps.api.services.conservative_case import CompanyBaseline
 
 HORIZON_YEARS = 10
 # Years 1-5 grow at the blended rate; 6-10 fade linearly to the riskfree rate (Damodaran's default).
+# The cases guide states both horizons in prose (`cases.guide.auto.source`, en and ko): change both.
 HIGH_GROWTH_YEARS = 5
 # The WACC and the tax rate start converging in this year, as in the SpaceX cases.
 CONVERGE_FROM_YEAR = 6

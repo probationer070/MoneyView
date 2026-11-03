@@ -196,6 +196,84 @@ export const en = {
     allTickers: "All tickers",
     none: "No stored cases yet.",
     noneFor: "No stored cases for {filter}.",
+    guide: {
+      about: {
+        title: "What this screen is",
+        body: "The list of stored valuation cases. A case is one company valued segment by segment, the way Damodaran does it: a bundle of assumptions that the engine turns into yearly cash flows and discounts to a value.",
+        model: "A case holds company-wide assumptions (discount rates, tax rates, cash, debt, share counts) and, for each segment, a starting revenue and margin, a target revenue and margin, and how much revenue each unit of capital supports.",
+        open: "Select a case name to open it. The case screen shows its valuation, lets you fork it, explains why a fork moved, and simulates its uncertainty. That simulation is separate from the Simulation Lab.",
+      },
+      table: {
+        title: "Reading the table",
+        columns: "Each row shows the case name, its ticker, its as-of date and the years it runs: from the base year to the target year.",
+        fork: "A name in the forked-from column means the case was made by changing some inputs of that case. A dash means it was not forked.",
+        filter: "Typing a ticker in the filter keeps only that ticker's cases. Arriving from the Valuation screen fills it in. The tab remembers the last value you typed.",
+      },
+      auto: {
+        title: "Cases the app creates",
+        fair: "A name like “damodaran_<ticker>_<vintage>_FY<year>” is a fair-value case, created when the app works out a ticker's fair value. The vintage is the edition of the Damodaran industry averages it used, and the year is the latest fiscal year of statements. The same name is reused, not rebuilt. A newer fiscal year makes a new case.",
+        source: "It uses the company's own figures and fills the gaps with the averages of the company's own industry. Years 1 to 5 grow at the average of the company's recent revenue growth and the industry's, held inside a floor and a cap. Years 6 to 10 fade to the risk-free rate. A company whose margin is below its industry's moves halfway toward it. A company above it keeps its own.",
+        cyclical: "A name ending in “_cyclical” is an industry whose revenue follows a commodity price cycle, such as metals, steel or oil and gas. Its recent industry growth swings too far to extend, so the risk-free rate takes the industry's place in the average. The company's own growth still counts. The rule differs, so the name does too.",
+        conservative: "A name like “conservative_<ticker>_<vintage>” is a floor case. For every input it takes the worse of the company's figure and the top industries of its sector.",
+        spacex: "The two cases starting with “spacex_” are Damodaran's SpaceX valuations before and after the prospectus. The app creates them at start-up if they are missing.",
+      },
+    },
+  },
+  caseDetail: {
+    guide: {
+      about: {
+        title: "What this screen is",
+        body: "One stored case. The header gives its name, ticker, as-of date and the years it runs. A forked case also links to the case it came from.",
+        sections: "The sections run from top to bottom: Valuation, Market cross-check, Inputs, Why it moved (forks only), Fork this case and Uncertainty. Their names appear on screen in English.",
+      },
+      valuation: {
+        title: "The Valuation section",
+        body: "The engine runs once on the case's stored inputs. If it refuses the inputs, the section shows its reason in its own words and never a zero.",
+        figures: "Value per share (diluted) divides equity value by the existing shares plus the new shares an IPO adds. Value per share (basic) divides by the existing shares only and leaves any IPO money out. Enterprise value is the discounted sum of the cash flows. Equity value adds cash to it, subtracts debt and adds any IPO proceeds.",
+        terminal: "Terminal-value share is the percentage of enterprise value that comes from the years after the last forecast year. The higher it is, the more the value rests on far-off assumptions.",
+        tables: "The year-by-year table shows revenue, operating income, tax, reinvestment, free cash flow to the firm and that year's discount rate. The segment table shows each segment in the target year only.",
+        offer: "A case with an offering price adds four figures: the price, the company value it implies (price times all shares), how far the price sits above (+) or below (−) the diluted value per share, and the new shares. New shares are a typed number, or the IPO proceeds divided by the price, or, when there is neither, the count at which the shares are sold at their own value.",
+      },
+      pricing: {
+        title: "The Market cross-check section",
+        body: "It asks whether the discounted cash flow agrees with what the market pays for the industry. The case's base-year revenue is multiplied by the EV/Sales of the Damodaran industry the ticker belongs to. That enterprise value sits beside the one from the cash flows.",
+        gap: "The sentence says how far the cash-flow value is above or below the industry-multiple value. Both are enterprise values in the case's own units, and the comparison has no time horizon. The source line names the industry data used.",
+        refused: "No comparison is made, and the reason is given, for a case with no ticker, a thin industry, no usable multiple or a case that cannot run.",
+      },
+      inputs: {
+        title: "The Inputs section",
+        body: "Every input stored with the case. Rates show as percentages. A missing value reads “not set”. Segments follow, each with its own inputs.",
+        narrative: "A quoted sentence under an input is its narrative: why the value was chosen. It gives the claim, a three-P grade, a confidence and sometimes an evidence source. The three-P grade is “possible”, “plausible” or “probable”, your own rating of how believable the story is. Confidence is “confirmed”, “derived” or “assumed”.",
+        narrated: "Most segment inputs carry a narrative. Company-wide inputs such as rates, cash and debt do not.",
+      },
+      why: {
+        title: "The Why it moved section",
+        body: "Only forks have it. It splits the change in diluted value per share between the parent and this case across the inputs that were changed.",
+        shapley: "The split is exact (a Shapley value). It averages over every order in which the changes could be applied, so the order you listed them in does not matter. The parts add up to the whole difference, and the last line says so, or turns into a warning if they do not.",
+        bars: "In each bar, right of centre raised the value and left of centre lowered it. Bar length is relative to the largest part.",
+        limit: "Above a set number of changed inputs the split is not made and the section says why. The fork counter shows that number.",
+      },
+      fork: {
+        title: "The Fork this case section",
+        body: "Give the new case a name, pick the inputs to change and type their new values. The original is untouched, and you are taken to the new case.",
+        rows: "Rates are typed as percentages. The current value sits beside each row. A value equal to the current one is ignored.",
+        narrative: "An input that needs a narrative also needs a claim and a three-P grade. The grade has no default, so you choose it. A blank confidence counts as assumed. The evidence source is optional.",
+        refusal: "If the API refuses the fork, its reason is shown as written and the rows it names are outlined. A network or server failure is shown as an error instead.",
+        counter: "The counter shows how many inputs you have changed against the limit. A fork over the limit is still created, but Why it moved cannot explain it.",
+      },
+      simulate: {
+        title: "The Uncertainty section",
+        body: "Give a few inputs a range, and the case is valued once for each random draw. The result is how the value per share spreads. Nothing is stored. The seed reproduces a result.",
+        inputs: "For each input you pick a shape (triangular, normal or uniform) and the numbers it needs. An input that needs a narrative needs a claim and a three-P grade here too.",
+        runs: "The allowed range of runs sits beside the field. The seed is optional, and the result shows the seed that was used.",
+        accounting: "The first line counts the draws that were valued and the draws the engine refused. Refusals are grouped by reason in a table.",
+        suppressed: "When the refused share reaches the server's limit, the statistics are not given, because the accepted draws would describe a different question. The section shows the server's own sentence instead. A single statistic that overflowed is left out alone.",
+        stats: "P10, P50 and P90 are the values below which 10%, 50% and 90% of the accepted draws fall. The mean is their average. When some draws were refused the labels say they are among the accepted draws.",
+        histogram: "The bars count the accepted draws by value per share. The differently coloured bar holds this case's own value. If that value is outside the simulated range, the caption says so.",
+        association: "Rank association is the Spearman coefficient, from −1 to 1: positive when the value tends to rise with the input and negative when it falls. It is not a share of the value. The list is sorted by strength, and an input that never varied is marked as not measurable.",
+        rerun: "“Rerun with this seed” repeats the exact request behind the result on screen, not what the form holds now.",
+      },
+    },
   },
   decisions: {
     guide: {
@@ -832,6 +910,76 @@ export const en = {
       newPlaceholder: "New category",
       add: "Add category",
       addFailed: "Could not add the category.",
+    },
+    guide: {
+      about: {
+        title: "What this screen is",
+        body: "The dated events that charts draw as vertical lines. Charts only show and filter them. Every add, edit and delete happens here.",
+      },
+      sources: {
+        title: "Where events come from",
+        builtin: "Built-in events come from data files in which every event cites a source: Fed rate decisions and geopolitical events. They are read-only here.",
+        rule: "Rule events have dates set by a calendar rule, such as the quarterly options expiration day (quadruple witching). They are read-only too.",
+        computed: "Computed events are found by the app in stored daily closes: S&P 500 drawdowns and large oil moves. They have no source link. They are recalculated whenever the list is requested, so they can change when price data is refreshed.",
+        user: "Your own events are the ones you add with the form. They may have a source link. A chart marks one with no link as added by you, with no source.",
+      },
+      form: {
+        title: "Adding and editing",
+        body: "An event needs a date and a label. The end date makes it a span. The category defaults to Uncategorized. The note and source URL are optional.",
+        errors: "If the server refuses an event, one alert shows its message as written, and it names the field.",
+        edit: "Edit and Delete appear only on your own events, and Delete asks to confirm. Editing fills the form with the event.",
+      },
+      categories: {
+        title: "Categories",
+        body: "Each category has a checkbox, a colour and a name. The checkbox decides whether its events show on charts. It is one setting for every chart.",
+        edit: "Save applies a changed name or colour. A built-in category you have changed offers Reset to default, which restores its name and colour and keeps its visibility.",
+        delete: "You can delete your own category only while none of your events uses it. The button shows how many do. A built-in category cannot be deleted.",
+      },
+      table: {
+        title: "Reading the events table",
+        columns: "Rows are newest first. A span shows both dates. Under the label is the note. The origin column says built-in, rule, added by you or computed from prices. The last column says where a read-only event comes from.",
+        filter: "You can filter by category and by origin. “Needs category” lists events whose category was removed. Such an event shows under Uncategorized, with a note naming the removed category.",
+      },
+    },
+  },
+  alerts: {
+    guide: {
+      about: {
+        title: "What this screen is",
+        body: "The past record of three kinds of signal: risk alerts, surges and the day's top gainers. Each row is one signal. The server computes and stores every value, and this screen only shows them.",
+        notAdvice: "The columns after a signal starts are what happened next, not a forecast and not advice.",
+      },
+      filters: {
+        title: "The filter row",
+        kind: "Kind switches the table between all signals and one kind. The columns change with the kind.",
+        dates: "The two dates keep rows whose start date falls in the range. Rows are newest first. A start after the end shows a notice instead of rows.",
+        shown: "“On banner only” appears for surges. It keeps the surges that were shown as a banner on their start day.",
+        csv: "The CSV download saves the rows currently shown. Its headers follow the screen language, and its numbers are not rounded. It is available once all three lists have loaded.",
+        address: "The filters live in the page address, so a reload or a shared link keeps them. A long list shows part of it, with a button for more.",
+      },
+      risk: {
+        title: "Risk alerts",
+        start: "A risk alert opens when a theme of your watchlist has fallen from its recent high and kept falling for a few days, and enough warning indicators are on that same day. The themes confirmed that day must also make up a large enough share of the watchlist by market value, unless the semiconductor index confirms on its own. Only one alert runs at a time. It closes on the release date, when no theme is left in it.",
+        warnings: "The warning indicators are the high-yield spread, rates, oil, Fed hikes, hot inflation and narrowing market breadth. The report lists which were on at the start, with their values.",
+        columns: "Days counts trading days. Themes gives the number of themes and the first few names. Primary theme is the one that had fallen furthest at the start. The “after” columns give that theme's move 5, 10 and 20 trading days later. A dash means that time has not passed yet.",
+        outcome: "“Max further drop” is the largest additional fall within 10 trading days. The last column says whether a theme fell past the line named in its header, or that it is too early to tell.",
+      },
+      surge: {
+        title: "Surges",
+        start: "A surge starts when a theme's rise passes four tests at once: move size, a sudden steepening of the slope, breadth and RSI. The report gives each value and the rule it was tested against.",
+        end: "A surge ends when the closing level drops below the trend line, or when the theme stalls without a new high. A change of rules can also close it. The end reason column says which. It reads ongoing until then.",
+        columns: "On banner says whether the surge appeared as a banner on its start day. “Max further rise” is the largest additional gain within 10 trading days.",
+        overheated: "The report also gives the day the theme first turned overheated, if it did, and the leading stocks on the start day.",
+      },
+      movers: {
+        title: "Yesterday's gainers",
+        body: "One row is one trading day. Ranks 1 to 5 are the watchlist stocks with the biggest one-day gain that day. Each cell shows the ticker and the gain, and hovering a ticker shows the name. This is a result, not a prediction.",
+      },
+      origin: {
+        title: "Badges and reports",
+        backfill: "A row marked as computed from past data was calculated afterwards over history the app had not watched live, with the same rules.",
+        report: "Selecting a row opens its report on the right and puts it in the page address. A risk or surge report starts with a chart of its main theme's level, with the signal span shaded. “Enlarge” opens the report full size.",
+      },
     },
   },
   market: {

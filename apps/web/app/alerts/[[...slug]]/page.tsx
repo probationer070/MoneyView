@@ -2,6 +2,7 @@
 
 import { use, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { ALERTS_GUIDE_ID, AlertsGuide } from "@/components/risk/AlertsGuide";
 import { RecordReport } from "@/components/risk/RecordReport";
 import { RecordsTable } from "@/components/risk/RecordsTable";
 import { ActionButton } from "@/components/ui/ActionButton";
@@ -112,6 +113,8 @@ export default function AlertsPage({ params, searchParams }: { params: Promise<{
   // outside (back/forward, a nav link), and the filters follow it. Adjusted while rendering, as React advises
   // for state derived from a changed input.
   const [pending, setPending] = useState<string[]>([]);
+  // Closed on every visit, like PageGuide.
+  const [guideOpen, setGuideOpen] = useState(false);
   const [seenAddress, setSeenAddress] = useState(addressQuery);
   const sync = syncAddress({ pending, seen: seenAddress }, addressQuery, queryText);
   if (sync.seen !== seenAddress) setSeenAddress(sync.seen);
@@ -246,8 +249,19 @@ export default function AlertsPage({ params, searchParams }: { params: Promise<{
           </label>
         )}
         <ActionButton size="sm" className="ml-auto" label={t("risk.records.download")} onClick={download} disabled={!ready || shownRows.length === 0} />
+        <button
+          type="button"
+          data-testid="alerts-guide-toggle"
+          aria-expanded={guideOpen}
+          aria-controls={guideOpen ? ALERTS_GUIDE_ID : undefined}
+          onClick={() => setGuideOpen((open) => !open)}
+          className="type-small shrink-0 text-[var(--ink-muted)] underline decoration-dotted underline-offset-4 hover:text-[var(--brand-text)]"
+        >
+          {t("guide.summary")}
+        </button>
       </FilterBar>
-      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,3fr)_minmax(0,2fr)] gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:grid-rows-1">
+      <div className="relative grid min-h-0 flex-1 grid-rows-[minmax(0,3fr)_minmax(0,2fr)] gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:grid-rows-1">
+        {guideOpen ? <AlertsGuide /> : null}
         <div className="relative min-h-0 overflow-auto border border-[var(--line)] bg-[var(--surface-raised)]">{table}</div>
         <section
           data-testid="records-report"

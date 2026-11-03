@@ -8,6 +8,7 @@ import { useMarketEvents, type MarketEvent } from "@/lib/useMarketEvents";
 import { RecordsSyncStatus, useRecordsSyncStatus } from "@/app/components/RecordsSyncStatus";
 import { CategoriesPanel } from "./components/CategoriesPanel";
 import { EventForm } from "./components/EventForm";
+import { EventsGuide } from "./components/EventsGuide";
 import { EventsTable } from "./components/EventsTable";
 
 export default function EventsPage() {
@@ -25,6 +26,7 @@ export default function EventsPage() {
         title={t("events.title")}
         subtitle={t("events.subtitle")}
       />
+      <div className="mb-4"><EventsGuide /></div>
       <RecordsSyncStatus status={recordsSyncQuery.data} />
       {status === "loading" ? <p className="type-body text-[var(--ink-muted)]">{t("events.loading")}</p> : null}
       {status === "unavailable" ? (

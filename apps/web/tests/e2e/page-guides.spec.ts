@@ -1,21 +1,24 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { API_PREFIX } from "./helpers/mockUtils";
+import { CASE_SUMMARIES, mockCasesApi } from "./helpers/casesApiMock";
 import { mockDecisionsApi } from "./helpers/decisionsPageMock";
+import { mockEventsApi, UNCATEGORIZED } from "./helpers/eventsApiMock";
 import { mockMarketPageApi } from "./helpers/marketPageMock";
 import { installMonteCarloWorker } from "./helpers/monteCarloWorkerMock";
 import { expectNoPageScroll } from "./helpers/noPageScroll";
 import { mockPortfolioPageApi } from "./helpers/portfolioPageMock";
+import { mockRiskRecords } from "./helpers/riskApiMock";
 import { mockValuationApi } from "./helpers/valuationPageMock";
 import { en } from "../../lib/i18n/messages/en";
 import { ko } from "../../lib/i18n/messages/ko";
 
-// "How to read this screen" on the market overview, the portfolio, news, Monte Carlo, decisions and valuation pages (same idea as
+// "How to read this screen" on the market overview, portfolio, news, Monte Carlo, decisions, valuation, cases, case, events and alerts pages (same idea as
 // signals-guide.spec.ts and corporate-guide.spec.ts). Closed by default, Korean in ko-KR, and the
 // one-screen / shell layouts do not start scrolling the page.
 
 // Words that stay Latin in Korean copy: tickers, finance acronyms (also the labels the UI keeps in Latin), a key name,
-// the product name, and the decision actions, which the Decision Log shows as stored.
-const LATIN_OK = /\b(KOSPI|ETF|WACC|DCF|ROIC|UTC|Esc|MoneyView|VaR|CVaR|EPS|PER|buy|sell|watch|pass)\b/g;
+// the product name, a company name and the decision actions, which the Decision Log shows as stored.
+const LATIN_OK = /\b(KOSPI|ETF|WACC|DCF|ROIC|UTC|Esc|MoneyView|VaR|CVaR|EPS|PER|buy|sell|watch|pass|RSI|CSV|API|IPO|URL|SpaceX)\b/g;
 
 function guideTitles(guide: Record<string, unknown>): string[] {
   return Object.values(guide).flatMap((section) => {
@@ -24,8 +27,12 @@ function guideTitles(guide: Record<string, unknown>): string[] {
   });
 }
 
+// A guide may quote an on-screen label or stored value that the UI keeps in English: those sit inside “ ” and are not
+// counted as English prose. Only the guides for the cases, events and alerts screens quote anything.
+const QUOTED = /“[^”]*”/g;
+
 async function expectKoreanOnly(guide: Locator, enGuide: Record<string, unknown>, koGuide: Record<string, unknown>) {
-  const text = await guide.innerText();
+  const text = (await guide.innerText()).replace(QUOTED, "");
   for (const title of guideTitles(koGuide)) expect(text, `ko title "${title}"`).toContain(title);
   for (const title of guideTitles(enGuide)) expect(text, `en title "${title}" must not appear`).not.toContain(title);
   expect(text.replace(LATIN_OK, "").match(/[A-Za-z]{3,}/g) ?? [], "no English words in the Korean guide").toEqual([]);
@@ -150,5 +157,68 @@ test.describe("page guides, in Korean", () => {
     await guide.locator("summary").click();
     await expect(guide.getByText("업종 대비 과대 가능 배지", { exact: true })).toBeVisible();
     await expectKoreanOnly(guide, en.valuation.guide, ko.valuation.guide);
+  });
+
+  test("cases list: a closed guide under the header opens with Korean sections", async ({ page }: { page: Page }) => {
+    await mockCasesApi(page);
+    await page.goto("/cases", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "케이스", exact: true })).toBeVisible({ timeout: 60_000 });
+    const guide = page.getByTestId("cases-guide");
+    await expect(guide.locator("summary")).toHaveText("이 화면 읽는 법");
+    await expect(guide).not.toHaveAttribute("open", "");
+    await expect(guide.getByText("앱이 만드는 케이스", { exact: true })).toBeHidden();
+
+    await guide.locator("summary").click();
+    await expect(guide.getByText("앱이 만드는 케이스", { exact: true })).toBeVisible();
+    await expectKoreanOnly(guide, en.cases.guide, ko.cases.guide);
+  });
+
+  test("case screen: a closed guide under the header opens with Korean sections", async ({ page }: { page: Page }) => {
+    await mockCasesApi(page);
+    await page.goto(`/cases/${CASE_SUMMARIES[0].id}`, { waitUntil: "domcontentloaded" });
+    const guide = page.getByTestId("case-detail-guide");
+    await expect(guide.locator("summary")).toHaveText("이 화면 읽는 법", { timeout: 60_000 });
+    await expect(guide).not.toHaveAttribute("open", "");
+    await expect(guide.getByText("움직인 이유 구역", { exact: true })).toBeHidden();
+
+    await guide.locator("summary").click();
+    await expect(guide.getByText("움직인 이유 구역", { exact: true })).toBeVisible();
+    await expectKoreanOnly(guide, en.caseDetail.guide, ko.caseDetail.guide);
+  });
+
+  test("events: a closed guide under the header opens with Korean sections", async ({ page }: { page: Page }) => {
+    await mockEventsApi(page, { events: [], categories: [UNCATEGORIZED] });
+    await page.goto("/events", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("events-table")).toBeVisible({ timeout: 60_000 });
+    const guide = page.getByTestId("events-guide");
+    await expect(guide.locator("summary")).toHaveText("이 화면 읽는 법");
+    await expect(guide).not.toHaveAttribute("open", "");
+    await expect(guide.getByText("이벤트가 오는 곳", { exact: true })).toBeHidden();
+
+    await guide.locator("summary").click();
+    await expect(guide.getByText("이벤트가 오는 곳", { exact: true })).toBeVisible();
+    await expectKoreanOnly(guide, en.events.guide, ko.events.guide);
+  });
+
+  test("alerts: a closed toggle in the filter row opens a guide over the panels without scrolling the page", async ({ page }: { page: Page }) => {
+    await mockRiskRecords(page);
+    await page.goto("/alerts", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("records-table")).toBeVisible({ timeout: 60_000 });
+    const toggle = page.getByTestId("alerts-guide-toggle");
+    await expect(toggle).toHaveText("이 화면 읽는 법");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByTestId("alerts-guide")).toHaveCount(0);
+    await page.evaluate(() => document.fonts.ready);
+    await expectNoPageScroll(page, "alerts, guide closed");
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const guide = page.getByTestId("alerts-guide");
+    await expect(guide.getByText("위험 경보", { exact: true })).toBeVisible();
+    await expectKoreanOnly(guide, en.alerts.guide, ko.alerts.guide);
+    await expectNoPageScroll(page, "alerts, guide open");
+
+    await toggle.click();
+    await expect(page.getByTestId("alerts-guide")).toHaveCount(0);
   });
 });

@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import { casesApi, retryUnlessRefused } from "../casesApi";
+import { CaseDetailGuide } from "../components/CaseDetailGuide";
 import { ForkSection } from "../components/ForkSection";
 import { InputsSection } from "../components/InputsSection";
 import { PricingSection } from "../components/PricingSection";
@@ -53,6 +54,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
       ) : (
         <div className="mb-6"><QueryStatus query={caseQuery} what="the case" testId="case" /></div>
       )}
+      {record && <div className="mb-4"><CaseDetailGuide /></div>}
       {record && record.parent_case_id !== null && (
         <p className="mb-4 type-body text-[var(--ink-secondary)]">
           Forked from <Link href={`/cases/${record.parent_case_id}`} className="underline underline-offset-2">case {record.parent_case_id}</Link>
