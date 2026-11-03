@@ -14,8 +14,8 @@ export function InputsSection({ record }: { record: CaseRecord }) {
           const narrative = record.narratives.find((n) => n.input_field === m.field);
           return (
             <div key={m.field} data-testid={`input-case.${m.field}`} className="flex flex-wrap justify-between gap-x-3 border-b border-[var(--line)] py-1">
-              <dt className="text-[var(--ink-secondary)]">{m.label}</dt>
-              <dd className="tabular-nums text-[var(--ink)]">{formatWire(m, num(record[m.field]))}</dd>
+              <dt className="text-[var(--ink-secondary)]">{t(m.labelKey)}</dt>
+              <dd className="tabular-nums text-[var(--ink)]">{formatWire(m, num(record[m.field]), t)}</dd>
               {narrative && (
                 <dd className="mt-0.5 w-full type-small text-[var(--ink-muted)]">
                   “{narrative.claim}” · {narrative.three_p} · {narrative.confidence}
@@ -35,8 +35,8 @@ export function InputsSection({ record }: { record: CaseRecord }) {
               return (
                 <li key={m.field} data-testid={`input-segment.${segment.name}.${m.field}`} className="border-b border-[var(--line)] py-1">
                   <div className="flex justify-between gap-3">
-                    <span className="text-[var(--ink-secondary)]">{m.label}</span>
-                    <span className="tabular-nums text-[var(--ink)]">{formatWire(m, num(segment[m.field]))}</span>
+                    <span className="text-[var(--ink-secondary)]">{t(m.labelKey)}</span>
+                    <span className="tabular-nums text-[var(--ink)]">{formatWire(m, num(segment[m.field]), t)}</span>
                   </div>
                   {narrative && (
                     <p className="mt-0.5 type-small text-[var(--ink-muted)]">

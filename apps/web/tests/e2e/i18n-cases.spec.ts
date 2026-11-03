@@ -33,4 +33,27 @@ test.describe("case detail in Korean", () => {
     await expect(fork.getByRole("button", { name: "파생 만들기", exact: true })).toBeVisible();
     await expect(fork.getByRole("button", { name: "Create fork", exact: true })).toHaveCount(0);
   });
+
+  test("field labels, shape parameters and row problems are Korean", async ({ page }) => {
+    await mockCasesApi(page);
+    await gotoKoCase(page, 3);
+
+    // Inputs list and the fork picker use the Korean field label.
+    await expect(page.getByTestId("case-inputs").getByText("기준 마진", { exact: true }).first()).toBeVisible();
+    await expect(page.getByTestId("case-inputs").getByText("Base margin", { exact: true })).toHaveCount(0);
+
+    const fork = page.getByTestId("case-fork");
+    await fork.getByRole("button", { name: "변경 추가", exact: true }).click();
+    await expect(fork.getByRole("option", { name: "WACC (안정기)", exact: true })).toHaveCount(1);
+    await expect(fork.getByRole("option", { name: "WACC, stable", exact: true })).toHaveCount(0);
+    // A row with no field chosen reports its problem in Korean once submitted.
+    await fork.getByRole("button", { name: "파생 만들기", exact: true }).click();
+    await expect(fork.getByText("항목을 선택하십시오")).toBeVisible();
+
+    // Simulate shape parameters.
+    const simulate = page.getByTestId("case-simulate");
+    await simulate.getByRole("button", { name: "입력 추가", exact: true }).click();
+    await expect(simulate.getByLabel("최빈값", { exact: true })).toBeVisible();
+    await expect(simulate.getByLabel("Most likely", { exact: true })).toHaveCount(0);
+  });
 });

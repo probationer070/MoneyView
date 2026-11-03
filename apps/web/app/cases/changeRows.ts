@@ -1,4 +1,5 @@
-import { toWire, type FieldTarget } from "./caseFields";
+import type { MessageKey } from "../../lib/i18n/translate";
+import { englishTr, toWire, type FieldTarget, type Tr } from "./caseFields";
 import type {
   Confidence, DistributionLeaf, ForkLeaf, ForkRequest, Overrides, Shape, SimulateRequest, ThreeP,
 } from "./caseTypes";
@@ -28,26 +29,37 @@ export interface SimulateRow {
   narrative: NarrativeState;
 }
 
-export const SHAPE_PARAMS: Record<Shape, readonly { name: string; label: string }[]> = {
-  triangular: [{ name: "low", label: "Low" }, { name: "mode", label: "Most likely" }, { name: "high", label: "High" }],
-  normal: [{ name: "mean", label: "Mean" }, { name: "sd", label: "Std dev" }],
-  uniform: [{ name: "low", label: "Low" }, { name: "high", label: "High" }],
+export const SHAPE_PARAMS: Record<Shape, readonly { name: string; label: string; labelKey: MessageKey }[]> = {
+  triangular: [
+    { name: "low", label: "Low", labelKey: "cases.shape.low" },
+    { name: "mode", label: "Most likely", labelKey: "cases.shape.mode" },
+    { name: "high", label: "High", labelKey: "cases.shape.high" },
+  ],
+  normal: [
+    { name: "mean", label: "Mean", labelKey: "cases.shape.mean" },
+    { name: "sd", label: "Std dev", labelKey: "cases.shape.sd" },
+  ],
+  uniform: [
+    { name: "low", label: "Low", labelKey: "cases.shape.low" },
+    { name: "high", label: "High", labelKey: "cases.shape.high" },
+  ],
 };
 
 type Parsed = { value: number } | { problem: string };
 
-function parseNumber(text: string, what: string): Parsed {
+function parseNumber(text: string, what: string, t: Tr): Parsed {
   const trimmed = text.trim();
-  if (trimmed === "") return { problem: `${what} is required` };
+  if (trimmed === "") return { problem: t("cases.problem.required", { what }) };
   const value = Number(trimmed);
-  if (!Number.isFinite(value)) return { problem: `"${trimmed}" is not a number` };
+  if (!Number.isFinite(value)) return { problem: t("cases.problem.notNumber", { text: trimmed }) };
   return { value };
 }
 
-function narrativeProblem(target: FieldTarget, narrative: NarrativeState): string | null {
+function narrativeProblem(target: FieldTarget, narrative: NarrativeState, t: Tr): string | null {
+  const label = t(target.meta.labelKey);
   if (!target.meta.narrated) return null;
-  if (!narrative.claim.trim()) return `${target.meta.label} is narrated: a change to it needs a claim`;
-  if (!narrative.threeP) return `${target.meta.label} is narrated: choose possible, plausible or probable`;
+  if (!narrative.claim.trim()) return t("cases.problem.narratedClaim", { label });
+  if (!narrative.threeP) return t("cases.problem.narratedThreeP", { label });
   return null;
 }
 
@@ -89,6 +101,7 @@ export function buildForkRequest(
   rows: ForkRow[],
   targets: Map<string, FieldTarget>,
   current: (targetKey: string) => number | null,
+  t: Tr = englishTr,
 ): ForkBuild {
   const request: ForkRequest = { case_name: caseName.trim(), overrides: emptyOverrides<ForkLeaf>() };
   const problems: Record<number, string> = {};
@@ -99,22 +112,22 @@ export function buildForkRequest(
   for (const row of rows) {
     const target = targets.get(row.targetKey);
     if (!target) {
-      problems[row.id] = "choose a field";
+      problems[row.id] = t("cases.problem.chooseField");
       continue;
     }
     if (seen.has(row.targetKey)) {
-      problems[row.id] = `${target.meta.label} is already changed in another row`;
+      problems[row.id] = t("cases.problem.alreadyChanged", { label: t(target.meta.labelKey) });
       continue;
     }
     seen.add(row.targetKey);
 
-    const parsed = parseNumber(row.value, "a new value");
+    const parsed = parseNumber(row.value, t("cases.problem.newValue"), t);
     if ("problem" in parsed) {
       problems[row.id] = parsed.problem;
       continue;
     }
     if (target.meta.integer && !Number.isInteger(parsed.value)) {
-      problems[row.id] = `${target.meta.label} takes a whole number`;
+      problems[row.id] = t("cases.problem.wholeNumber", { label: t(target.meta.labelKey) });
       continue;
     }
     const wire = toWire(target.meta, parsed.value);
@@ -125,7 +138,7 @@ export function buildForkRequest(
     }
     changedCount += 1;
 
-    const missing = narrativeProblem(target, row.narrative);
+    const missing = narrativeProblem(target, row.narrative, t);
     if (missing) {
       problems[row.id] = missing;
       continue;
@@ -154,6 +167,7 @@ export function buildSimulateRequest(
   runsText: string,
   seedText: string,
   targets: Map<string, FieldTarget>,
+  t: Tr = englishTr,
 ): SimulateBuild {
   const problems: Record<number, string> = {};
   const distributions = emptyOverrides<DistributionLeaf>();
@@ -162,11 +176,11 @@ export function buildSimulateRequest(
   for (const row of rows) {
     const target = targets.get(row.targetKey);
     if (!target) {
-      problems[row.id] = "choose a field";
+      problems[row.id] = t("cases.problem.chooseField");
       continue;
     }
     if (seen.has(row.targetKey)) {
-      problems[row.id] = `${target.meta.label} already has a distribution in another row`;
+      problems[row.id] = t("cases.problem.alreadyDistributed", { label: t(target.meta.labelKey) });
       continue;
     }
     seen.add(row.targetKey);
@@ -174,7 +188,7 @@ export function buildSimulateRequest(
     const leaf: DistributionLeaf = { shape: row.shape };
     let bad: string | null = null;
     for (const param of SHAPE_PARAMS[row.shape]) {
-      const parsed = parseNumber(row.params[param.name] ?? "", param.label);
+      const parsed = parseNumber(row.params[param.name] ?? "", t(param.labelKey), t);
       if ("problem" in parsed) {
         bad = parsed.problem;
         break;
@@ -187,7 +201,7 @@ export function buildSimulateRequest(
       problems[row.id] = bad;
       continue;
     }
-    const missing = narrativeProblem(target, row.narrative);
+    const missing = narrativeProblem(target, row.narrative, t);
     if (missing) {
       problems[row.id] = missing;
       continue;
@@ -199,11 +213,11 @@ export function buildSimulateRequest(
   const runsProblem =
     Number.isInteger(runs) && runs >= MIN_RUNS && runs <= MAX_RUNS
       ? null
-      : `runs must be a whole number from ${MIN_RUNS.toLocaleString("en-US")} to ${MAX_RUNS.toLocaleString("en-US")}`;
+      : t("cases.problem.runs", { min: MIN_RUNS.toLocaleString("en-US"), max: MAX_RUNS.toLocaleString("en-US") });
   const seedTrimmed = seedText.trim();
   const seed = seedTrimmed === "" ? undefined : Number(seedTrimmed);
   const seedValid = seed !== undefined && Number.isInteger(seed) && seed >= 0 && seed <= Number.MAX_SAFE_INTEGER;
-  const seedProblem = seedTrimmed === "" || seedValid ? null : "the seed must be a whole number of 0 or more";
+  const seedProblem = seedTrimmed === "" || seedValid ? null : t("cases.problem.seed");
   const request: SimulateRequest = {
     runs: Number.isInteger(runs) ? runs : 0,
     ...(seedValid ? { seed } : {}),

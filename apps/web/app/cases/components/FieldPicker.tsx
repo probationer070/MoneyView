@@ -14,13 +14,13 @@ export function FieldPicker({ targets, value, onChange }: { targets: FieldTarget
         <option value="">{tr("cases.field.choose")}</option>
         <optgroup label={tr("cases.field.caseGroup")}>
           {targets.filter((t) => t.scope === "case").map((t) => (
-            <option key={t.key} value={t.key}>{t.meta.label}</option>
+            <option key={t.key} value={t.key}>{tr(t.meta.labelKey)}</option>
           ))}
         </optgroup>
         {segments.map((segment) => (
           <optgroup key={segment} label={tr("cases.field.segment", { name: segment })}>
             {targets.filter((t) => t.segment === segment).map((t) => (
-              <option key={t.key} value={t.key}>{t.meta.label}{t.meta.narrated ? tr("cases.field.narrated") : ""}</option>
+              <option key={t.key} value={t.key}>{tr(t.meta.labelKey)}{t.meta.narrated ? tr("cases.field.narrated") : ""}</option>
             ))}
           </optgroup>
         ))}

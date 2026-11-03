@@ -33,7 +33,7 @@ export function ForkSection({ record }: { record: CaseRecord }) {
     const target = byKey.get(key);
     return target ? wireValue(record, target) : null;
   };
-  const built = buildForkRequest(caseName, rows, byKey, current);
+  const built = buildForkRequest(caseName, rows, byKey, current, t);
 
   const mutation = useMutation({
     mutationFn: (body: ForkRequest) => casesApi.fork(record.id, body),
@@ -106,7 +106,7 @@ export function ForkSection({ record }: { record: CaseRecord }) {
               <div className="flex flex-wrap items-end gap-3">
                 <FieldPicker targets={targets} value={row.targetKey} onChange={(key) => update(row.id, { targetKey: key })} />
                 {target && (
-                  <span className="pb-1 type-small text-[var(--ink-muted)]">{t("cases.fork.current", { value: formatWire(target.meta, wireValue(record, target)) })}</span>
+                  <span className="pb-1 type-small text-[var(--ink-muted)]">{t("cases.fork.current", { value: formatWire(target.meta, wireValue(record, target), t) })}</span>
                 )}
                 <label className="flex flex-col gap-1 type-small text-[var(--ink-secondary)]">
                   {t("cases.fork.newValue")}{target && unitSuffix(target.meta) ? ` (${unitSuffix(target.meta)})` : ""}

@@ -1,17 +1,26 @@
+import { en, type Messages } from "../../lib/i18n/messages/en";
+import { translate, type MessageKey } from "../../lib/i18n/translate";
 import type { CaseRecord } from "./caseTypes";
+
+/** What `useT()` returns. The pure functions below take one and default to English. */
+export type Tr = (key: MessageKey, params?: Record<string, string | number>) => string;
+export const englishTr: Tr = (key, params) => translate(en, key, params);
+
+type FieldName = keyof Messages["cases"]["fields"];
 
 export type FieldUnit = "rate" | "money" | "ratio" | "year" | "count";
 
 export interface FieldMeta {
   field: string;
   label: string;
+  labelKey: MessageKey;
   unit: FieldUnit;
   narrated: boolean;
   integer: boolean;
 }
 
-function meta(field: string, label: string, unit: FieldUnit, narrated = false, integer = false): FieldMeta {
-  return { field, label, unit, narrated, integer };
+function meta(field: FieldName, label: string, unit: FieldUnit, narrated = false, integer = false): FieldMeta {
+  return { field, label, labelKey: `cases.fields.${field}`, unit, narrated, integer };
 }
 
 /** case_fork._SETTABLE_CASE_FIELDS. None is narrated. */
@@ -69,8 +78,8 @@ export function fromWire(field: FieldMeta, wire: number): number {
   return clean(field.unit === "rate" ? wire * 100 : wire);
 }
 
-export function formatWire(field: FieldMeta, wire: number | null | undefined): string {
-  if (wire === null || wire === undefined) return "not set";
+export function formatWire(field: FieldMeta, wire: number | null | undefined, t: Tr = englishTr): string {
+  if (wire === null || wire === undefined) return t("cases.notSet");
   const display = fromWire(field, wire);
   if (field.unit === "rate") return `${display.toFixed(2)}%`;
   if (field.integer) return String(display);
@@ -127,8 +136,9 @@ export function metaForInput(input: string): FieldMeta | null {
   return pool.find((m) => m.field === field) ?? null;
 }
 
-export function labelForInput(input: string): string {
+export function labelForInput(input: string, t: Tr = englishTr): string {
   const { segment, field } = splitInput(input);
-  const label = metaForInput(input)?.label ?? field;
+  const found = metaForInput(input);
+  const label = found ? t(found.labelKey) : field;
   return segment === null ? label : `${segment} · ${label}`;
 }

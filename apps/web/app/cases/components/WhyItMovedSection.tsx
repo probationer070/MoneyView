@@ -41,13 +41,13 @@ export function WhyItMovedSection({ caseId }: { caseId: number }) {
           <ul className="mt-3 flex flex-col gap-2">
             {diff.contributions.map((c, i) => {
               const meta = metaForInput(c.input);
-              const range = meta ? `${formatWire(meta, c.from)} → ${formatWire(meta, c.to)}` : `${c.from} → ${c.to}`;
+              const range = meta ? `${formatWire(meta, c.from, t)} → ${formatWire(meta, c.to, t)}` : `${c.from} → ${c.to}`;
               const width = `${(Math.abs(c.contribution) / largest) * 50}%`;
               const positive = c.contribution >= 0;
               return (
                 <li key={c.input} data-testid={`why-bar-${i}`} className="type-body">
                   <div className="flex justify-between gap-3">
-                    <span className="text-[var(--ink)]">{labelForInput(c.input)} <span className="text-[var(--ink-muted)]">{range}</span></span>
+                    <span className="text-[var(--ink)]">{labelForInput(c.input, t)} <span className="text-[var(--ink-muted)]">{range}</span></span>
                     <span className="tabular-nums">{fmtSigned(c.contribution)}</span>
                   </div>
                   {/* Diverging from the centre: left of centre is a negative contribution. */}

@@ -126,7 +126,7 @@ export function SimulateResults({
             <ul className="mt-2 flex flex-col type-body">
               {association.map((a, i) => (
                 <li key={a.input} data-testid={`association-${i}`} className="flex justify-between border-b border-[var(--line)] py-1">
-                  <span>{labelForInput(a.input)}</span>
+                  <span>{labelForInput(a.input, t)}</span>
                   <span className="tabular-nums">{a.spearman === null ? t("cases.simulate.notMeasurable") : signed(a.spearman)}</span>
                 </li>
               ))}

@@ -26,7 +26,7 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
   // reproduces what is on screen -- not whatever the form happens to hold right now.
   const [lastRequest, setLastRequest] = useState<SimulateRequest | null>(null);
 
-  const built = buildSimulateRequest(rows, runs, seed, byKey);
+  const built = buildSimulateRequest(rows, runs, seed, byKey, t);
   const mutation = useMutation({
     mutationFn: (body: SimulateRequest) => casesApi.simulate(record.id, body),
     onSuccess: (data, variables) => { setResult(data); setLastRequest(variables); },
@@ -77,7 +77,7 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
             <div key={row.id} data-testid={`simulate-row-${index}`} className="flex flex-col gap-2 border border-[var(--line)] p-3">
               <div className="flex flex-wrap items-end gap-3">
                 <FieldPicker targets={targets} value={row.targetKey} onChange={(key) => update(row.id, { targetKey: key })} />
-                {target && <span className="pb-1 type-small text-[var(--ink-muted)]">{t("cases.simulate.current", { value: formatWire(target.meta, wireValue(record, target)) })}</span>}
+                {target && <span className="pb-1 type-small text-[var(--ink-muted)]">{t("cases.simulate.current", { value: formatWire(target.meta, wireValue(record, target), t) })}</span>}
                 <label className="flex flex-col gap-1 type-small text-[var(--ink-secondary)]">
                   {t("cases.simulate.shape")}
                   <select value={row.shape} onChange={(e) => update(row.id, { shape: e.target.value as Shape, params: {} })} className={controlClass}>
@@ -88,9 +88,9 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
                 </label>
                 {SHAPE_PARAMS[row.shape].map((param) => (
                   <label key={param.name} className="flex flex-col gap-1 type-small text-[var(--ink-secondary)]">
-                    <span>{param.label}{suffix ? ` (${suffix})` : ""}</span>
+                    <span>{t(param.labelKey)}{suffix ? ` (${suffix})` : ""}</span>
                     <input
-                      aria-label={param.label}
+                      aria-label={t(param.labelKey)}
                       value={row.params[param.name] ?? ""}
                       onChange={(e) => update(row.id, { params: { ...row.params, [param.name]: e.target.value } })}
                       inputMode="decimal"
