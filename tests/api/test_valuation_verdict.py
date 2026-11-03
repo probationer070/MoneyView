@@ -451,7 +451,14 @@ def test_the_pe_row_names_the_real_contributor_count():
         "Computer Services": 30.0,
     }
     rows = [
-        dataclasses.replace(row, values={**row.values, "trailing_pe": pe_by_name.get(row.name)})
+        dataclasses.replace(
+            row,
+            values={
+                **row.values,
+                "trailing_pe": pe_by_name.get(row.name),
+                "aggregate_pe": pe_by_name.get(row.name),
+            },
+        )
         for row in TECHNOLOGY_ROWS
     ]
     store_vintage("2026-01-01", rows)
@@ -462,6 +469,38 @@ def test_the_pe_row_names_the_real_contributor_count():
     pe = panel["rows"]["trailing_pe"]
     assert pe["comparison"] == "sector avg 25.0"
     assert "3 of 5 industries" in pe["source"]
+
+
+def test_the_pe_row_compares_against_the_aggregate_pe_not_the_simple_average():
+    """Damodaran's `trailing_pe` column is a simple average of firm PEs, 2-3x the
+    aggregate multiple. The sector comparison must read `aggregate_pe`, so a
+    basket with trailing_pe 80 and aggregate_pe 30 compares against 30."""
+    import dataclasses
+
+    from apps.api.services.industry_benchmark_store import store_vintage
+    from tests.fixtures.industry_rows_technology import TECHNOLOGY_ROWS
+
+    trailing = {"Computers/Peripherals": 80.0, "Semiconductor Equip": 80.0, "Computer Services": 80.0}
+    aggregate = {"Computers/Peripherals": 30.0, "Semiconductor Equip": 30.0, "Computer Services": 30.0}
+    store_vintage(
+        "2026-01-01",
+        [
+            dataclasses.replace(
+                row,
+                values={
+                    **row.values,
+                    "trailing_pe": trailing.get(row.name),
+                    "aggregate_pe": aggregate.get(row.name),
+                },
+            )
+            for row in TECHNOLOGY_ROWS
+        ],
+    )
+    _facts("TGT")
+    _bars("TGT", _SERIES)
+
+    pe = build_verdict("TGT")["rows"]["trailing_pe"]
+    assert pe["comparison"] == "sector avg 30.0"
 
 
 def _statement_bundle(income=None):
@@ -518,8 +557,9 @@ def test_the_pe_row_computes_from_diluted_eps_and_names_both_bases():
     assert pe["comparison"] == "sector avg 25.0"
     assert pe["source"] == (
         f"own PE: Diluted EPS 7.46 for FY2025-09-30, price {_SERIES_PRICE:.2f} "
-        f"as of {_SERIES_PRICE_DATE}; Damodaran 2026-01-01 top-5-by-ROC sector "
-        f"basket (3 of 5 industries)"
+        f"as of {_SERIES_PRICE_DATE}; Damodaran 2026-01-01 industries' aggregate "
+        f"market cap over money-making firms' net income, averaged over the "
+        f"top-5-by-ROC sector basket (3 of 5 industries)"
     )
 
 
@@ -1056,7 +1096,14 @@ def _store_a_pe_vintage():
     store_vintage(
         "2026-01-01",
         [
-            dataclasses.replace(row, values={**row.values, "trailing_pe": pe_by_name.get(row.name)})
+            dataclasses.replace(
+                row,
+                values={
+                    **row.values,
+                    "trailing_pe": pe_by_name.get(row.name),
+                    "aggregate_pe": pe_by_name.get(row.name),
+                },
+            )
             for row in TECHNOLOGY_ROWS
         ],
     )

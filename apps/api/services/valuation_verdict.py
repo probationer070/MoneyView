@@ -391,25 +391,32 @@ def build_verdict(ticker: str, *, bars_loader=load_price_bars, statements_loader
     benchmark, vintage, bench_reason = resolve_for_ticker(ticker)
     if benchmark is None:
         rows["trailing_pe"] = _row(source="Damodaran", reason=bench_reason)
-    elif benchmark.columns.get("trailing_pe") is None:
+    elif benchmark.columns.get("aggregate_pe") is None:
         rows["trailing_pe"] = _row(
-            source="Damodaran", reason=f"no_sector_pe: {vintage} has no trailing_pe"
+            source="Damodaran", reason=f"no_sector_pe: {vintage} has no aggregate_pe"
         )
     else:
+        # The sector figure is the aggregate multiple (market cap over
+        # money-making firms' net income), not Damodaran's `trailing_pe`
+        # column: that column is a simple average of firm PEs and runs 2-3x
+        # the aggregate (81 vs 34 for Computers/Peripherals, 2026-01-01).
+        # Comparing a single company's PE against the simple average would
+        # overstate how cheap it looks.
         # `resolve_benchmark` averages each column independently and keeps any
-        # column with >= 3 surviving contributors -- a `trailing_pe` average
+        # column with >= 3 surviving contributors -- an `aggregate_pe` average
         # resting on 3 or 4 of the top-5-by-ROC basket is normal, not an edge
         # case. `.industries` holds the real contributor count; naming the
         # basket size alone would claim all 5 fed this average when fewer may
         # have.
-        pe_industries = benchmark.columns["trailing_pe"].industries
+        pe_industries = benchmark.columns["aggregate_pe"].industries
         # The sector figure is real information even when the subject's own PE
         # cannot be computed -- a refused row still has something to publish,
         # so `comparison` is set once here and every branch below keeps it.
-        comparison = f"sector avg {benchmark.columns['trailing_pe'].value:.1f}"
+        comparison = f"sector avg {benchmark.columns['aggregate_pe'].value:.1f}"
         damodaran_clause = (
-            f"Damodaran {vintage} top-5-by-ROC sector basket "
-            f"({len(pe_industries)} of 5 industries)"
+            f"Damodaran {vintage} industries' aggregate market cap over "
+            f"money-making firms' net income, averaged over the top-5-by-ROC "
+            f"sector basket ({len(pe_industries)} of 5 industries)"
         )
         eps_label = _EPS_LABELS[0]
         statement_bundle = statements_loader(ticker)
