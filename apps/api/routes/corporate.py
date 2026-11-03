@@ -62,6 +62,7 @@ from apps.api.services.corporate_statement_metrics import (
     YAHOO_STATEMENT_START_YEAR,
     get_yahoo_statement_bundle,
     metric_audit_for_ticker,
+    statement_currency_mismatch,
 )
 
 router = APIRouter()
@@ -322,6 +323,7 @@ def dynamic_dcf_model(ticker: str, params: ValuationAssumptions):
             metrics_loader=_metrics_for_ticker,
             risk_free_rate=DEFAULT_RISK_FREE_RATE,
             equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
+            currency_check=statement_currency_mismatch,
         )
     except EngineRefusal as exc:
         raise _refusal_422(exc) from exc
@@ -343,6 +345,7 @@ def get_dcf_full_report(ticker: str, params: ValuationAssumptions):
             metrics_loader=_metrics_for_ticker,
             risk_free_rate=DEFAULT_RISK_FREE_RATE,
             equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
+            currency_check=statement_currency_mismatch,
         )
     except EngineRefusal as exc:
         raise _refusal_422(exc) from exc
@@ -376,6 +379,7 @@ def get_bulk_dcf_reports(request: CorporateDcfBatchRequest):
         report_builder=build_dcf_full_report,
         risk_free_rate=DEFAULT_RISK_FREE_RATE,
         equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
+        currency_check=statement_currency_mismatch,
     )
     # `skipped` travels with the reports rather than being logged and dropped. A batch
     # that returned 134 reports for 139 tickers with nothing naming the other five would
@@ -401,6 +405,7 @@ async def stream_dcf_summary(request: Request, ticker: str, params: ValuationAss
             metrics_loader=_metrics_for_ticker,
             risk_free_rate=DEFAULT_RISK_FREE_RATE,
             equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
+            currency_check=statement_currency_mismatch,
         )
     except EngineRefusal as exc:
         raise _refusal_422(exc) from exc

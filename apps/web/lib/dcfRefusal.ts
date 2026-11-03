@@ -1,5 +1,6 @@
 import { getApiBaseUrl } from "@/lib/api";
 import { knownRefusalText } from "@/lib/impliedReturn";
+import type { Locale } from "@/lib/i18n/locale";
 
 /**
  * A DCF the backend declined to produce (HTTP 422 {detail: {code, message}}), e.g.
@@ -22,6 +23,11 @@ export class DcfRefusalError extends Error {
    */
   get readerText(): string {
     return knownRefusalText(this.code) ?? this.message;
+  }
+
+  /** The same sentence in the reader's language: `readerText` is always English. */
+  readerTextIn(locale: Locale): string {
+    return knownRefusalText(this.code, locale) ?? this.message;
   }
 }
 

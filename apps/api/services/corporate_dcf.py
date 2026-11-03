@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable
 
+from packages.core_finance.refusals import EngineRefusal
 from packages.core_finance.dcf import (
     calculate_equity_value,
     calculate_intrinsic_value_per_share,
@@ -57,6 +58,7 @@ def build_dcf_summary(
     risk_free_rate: float,
     equity_risk_premium: float = DEFAULT_EQUITY_RISK_PREMIUM,
     country_risk_premium: float | None = None,
+    currency_check: Callable[[str], str | None] | None = None,
 ) -> tuple[DCFSummary, DCFAssumptionSummary]:
     """Compute the lightweight DCF phases used by the realtime transport."""
 
@@ -68,6 +70,7 @@ def build_dcf_summary(
         risk_free_rate=risk_free_rate,
         equity_risk_premium=equity_risk_premium,
         country_risk_premium=country_risk_premium,
+        currency_check=currency_check,
     )
     return summary, assumptions
 
@@ -81,6 +84,7 @@ def build_dcf_full_report(
     risk_free_rate: float,
     equity_risk_premium: float = DEFAULT_EQUITY_RISK_PREMIUM,
     country_risk_premium: float | None = None,
+    currency_check: Callable[[str], str | None] | None = None,
 ) -> DCFFullReport:
     """Compute the full DCF report reserved for explicit retrieval."""
 
@@ -92,6 +96,7 @@ def build_dcf_full_report(
         risk_free_rate=risk_free_rate,
         equity_risk_premium=equity_risk_premium,
         country_risk_premium=country_risk_premium,
+        currency_check=currency_check,
     )
     return full_report
 
@@ -140,6 +145,7 @@ def build_bulk_dcf_reports(
     risk_free_rate: float,
     equity_risk_premium: float = DEFAULT_EQUITY_RISK_PREMIUM,
     country_risk_premium: float | None = None,
+    currency_check: Callable[[str], str | None] | None = None,
 ) -> BulkDcfResult:
     """Build full DCF reports for a deduplicated ticker list.
 
@@ -164,6 +170,9 @@ def build_bulk_dcf_reports(
     skipped: list[SkippedDcfTicker] = []
     for ticker in normalized_tickers:
         try:
+            # A mixed-currency ticker is skipped with its reason, like any other refusal (ERROR-LOG 2026-11-03).
+            if currency_check is not None and (reason := currency_check(ticker)) is not None:
+                raise EngineRefusal("currency_mismatch", reason)
             metrics = metrics_loader(ticker)
             report = report_builder(
                 ticker=ticker,
@@ -200,8 +209,13 @@ def _build_dcf_outputs(
     equity_risk_premium: float,
     country_risk_premium: float | None,
     bridge_loader=load_equity_bridge,
+    currency_check: Callable[[str], str | None] | None = None,
 ) -> tuple[DCFSummary, DCFAssumptionSummary, DCFFullReport]:
     ticker = ticker.upper()
+    # Statements and price in different currencies cannot make a value per share (ERROR-LOG
+    # 2026-11-03); refused before anything is valued, as fair_value.py does.
+    if currency_check is not None and (reason := currency_check(ticker)) is not None:
+        raise EngineRefusal("currency_mismatch", reason)
     current_price = current_price_loader(ticker)
     metrics = metrics_loader(ticker) if params.fcff is None or params.esg_penalty is None else None
     base_fcff = float(params.fcff if params.fcff is not None else metrics.fcff)

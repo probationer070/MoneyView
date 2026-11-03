@@ -36,15 +36,22 @@ Fix: the DCF builders resolve each ticker's own premium as `metrics.crp / 100` w
 Files changed: `apps/api/routes/corporate.py`, `apps/api/services/corporate_dcf.py`, `tests/api/test_country_risk_premium.py`.
 Prevention: a rate parameter names its unit, or takes a fraction like its neighbours. Percent constants (`*_PREMIUM = 0.8`) are converted where they are passed.
 
-## 2026-11-03: TSM's 5-year DCF compares a Taiwan-dollar value with a US-dollar price (not fixed)
+## 2026-11-03: TSM's 5-year DCF compares a Taiwan-dollar value with a US-dollar price
 
 Date: 2026-11-03 (found in the P4 measurement, plan §6.5).
 Command: `p4_measure.py` against a copy of the database: TSM's DCF value was 4,500.14 against a price of 405.15.
 Failure: TSM reports in TWD (`corporate_quote_facts.financial_currency`) and trades as a USD ADR. The DCF's FCFF and per-share bridge appear to stay in TWD while the price is in USD, so the gap is roughly the exchange rate rather than a valuation.
-Root cause: not yet confirmed. The likely cause is that the statement values are not converted to the quote currency before the bridge, and that the ADR ratio may also apply.
-Fix: Not fixed. A separate task: check every non-USD reporter (10 CAD, 1 EUR, 1 KRW, 1 TWD).
-Files changed: none.
-Prevention: a per-share value is compared with a price only in the price's currency.
+Root cause: confirmed. Nothing in the app converts currencies. `fair_value.py` already refused a statement currency that differs from the price currency (`currency_mismatch`). The 5-year DCF routes, the bulk report and the comparison table had no such check. Five of the 13 affected tickers showed a mixed value: TSM at 11x its price, ASML at 0.32x, TGB at 0.38x, CCJ at 0.76x, and TRP negative. The other eight were already refused for other reasons.
+Fix: Fixed 2026-11-03 by refusing these tickers, not by converting them.
+- `statement_currency_mismatch` (`corporate_statement_metrics.py`) names the two currencies when they differ.
+- The single, report and stream DCF routes answer 422 `currency_mismatch`.
+- The bulk report skips the ticker with that reason.
+- The comparison row gets `dcf_refusal` and `implied_return_refusal` set to `currency_mismatch`, with no value.
+- The screen shows the sentence in the reader's language. This also fixed every DCF refusal in the header showing in English in Korean mode (`DcfRefusalError.readerTextIn`).
+
+Converting the values would need FX rates and ADR ratios (TSM: 1 ADR = 5 shares) and is not done. Stored comparison snapshots keep their old rows until the comparison is refreshed. The Sensitivity tab's refusal text is still English (its runs are cached without a locale).
+Files changed: `apps/api/services/corporate_statement_metrics.py`, `corporate_dcf.py`, `corporate_comparison.py`, `apps/api/routes/corporate.py`, `apps/web/lib/dcfRefusal.ts`, `apps/web/app/corporate/page.tsx`, `lib/i18n/messages/{en,ko}.ts`, `tests/api/test_currency_mismatch.py`, `apps/web/tests/e2e/corporate-guide.spec.ts`.
+Prevention: a per-share value is compared with a price only in the price's currency. Any new valuation surface calls `statement_currency_mismatch` first, as these four do.
 
 ## 2026-11-02: the Corporate page never kept the metrics it loaded (latestLoadedMetrics stayed null)
 

@@ -76,6 +76,7 @@ import type {
   WatchlistHolding,
 } from "./corporateTypes";
 import { isComparisonSortKey } from "./corporateTypes";
+import { useLocale } from "@/lib/i18n/locale";
 import {
   annualMetricRows,
   clamp,
@@ -139,6 +140,7 @@ function tickerFromAddress(): string | undefined {
 
 export default function CorporateAnalysisPage() {
   useDevMonitorPageLoad({ component: "corporate" });
+  const { locale } = useLocale();
   // Local UI state: selected ticker assumptions, search input, add-company form, and active modal.
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -926,7 +928,7 @@ export default function CorporateAnalysisPage() {
     : null;
   // The full report needs a DCF result to be on screen, and a refusal blocks it.
   const canLoadFullReport = dcfRefusal === null && !(!dcfData && dcfStreamStatus === "idle");
-  const verdict = verdictView(dcfData, dcfStreamStatus === "streaming", dcfRefusal?.readerText ?? null); // block + strip, spec §2A
+  const verdict = verdictView(dcfData, dcfStreamStatus === "streaming", dcfRefusal?.readerTextIn(locale) ?? null); // block + strip, spec §2A
 
   return (
     <div className="mx-auto flex h-[calc(100dvh_-_var(--main-pad-top,0px)_-_var(--main-pad-bottom,0px))] max-w-7xl flex-col">

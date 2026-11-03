@@ -56,6 +56,7 @@ export const ko: Messages = {
       non_positive_market_ev: "순현금이 시가총액을 넘어 시장의 기업가치가 양수가 아닙니다.",
       below_model_range: "시장 가격은 영구성장률 + 0.5%를 넘는 어떤 수익률에서도 이 모델이 도달할 수 있는 수준을 넘습니다.",
       above_model_range: "내재 수익률이 연 1000%를 넘게 됩니다.",
+      currency_mismatch: "재무제표 통화가 주가 통화와 달라서, 주당 가치를 구하면 두 통화가 섞입니다.",
     },
   },
   cases: {

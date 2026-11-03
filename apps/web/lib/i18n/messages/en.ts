@@ -53,6 +53,7 @@ export const en = {
       non_positive_market_ev: "Net cash exceeds the market value, so the market's enterprise value is not positive.",
       below_model_range: "The market pays more than this model can reach at any return above terminal growth + 0.5%.",
       above_model_range: "The implied return would exceed 1000% per year.",
+      currency_mismatch: "The statements are in a different currency from the price, so a value per share would mix the two.",
     },
   },
   cases: {

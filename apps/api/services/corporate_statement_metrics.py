@@ -668,6 +668,26 @@ def quarterly_statement_rows(frame, statement: str, ticker: str) -> list[dict[st
     return sorted(rows, key=lambda row: (str(row["statement"]), str(row["metric"]), str(row["period"])), reverse=True)
 
 
+def statement_currency_mismatch(ticker: str, bundle_loader=None) -> str | None:
+    """Why a value per share cannot be compared with the price, or None.
+
+    The statements are in `financialCurrency` and the price in `currency`. They differ for 13
+    watchlist ADRs and cross-listings (10 CAD, ASML EUR, KEP KRW, TSM TWD), and nothing converts
+    them, so a DCF value per share mixes the two: TSM showed 4,500 against a 405 price (ERROR-LOG
+    2026-11-03). fair_value.py refuses the same case as `currency_mismatch`.
+    """
+    loader = bundle_loader or get_yahoo_statement_bundle
+    bundle = loader(ticker.upper(), "metrics")
+    if bundle is None:
+        return None
+    info = bundle.get("info") or {}
+    reported = str(info.get("financialCurrency") or "").strip().upper()
+    priced = str(info.get("currency") or "").strip().upper()
+    if reported and priced and reported != priced:
+        return f"{ticker.upper()} reports in {reported} and trades in {priced}; a value per share would mix the two"
+    return None
+
+
 def yahoo_statement_metrics(
     ticker: str,
     fallback: CorporateMetrics,

@@ -21,7 +21,7 @@ from apps.api.services.acquisition.runner import acquire_point_in_time
 from apps.api.services.acquisition.sources.quote_facts import fetch_quote_facts
 from apps.api.services.acquisition.sources.statements import fetch_statements
 from apps.api.services.acquisition.store import save_quote_facts, save_statements, statement_coverage
-from apps.api.services.corporate_statement_metrics import _pick_worst_quality
+from apps.api.services.corporate_statement_metrics import _pick_worst_quality, statement_currency_mismatch
 from apps.api.services.db import get_db
 from apps.api.services.equity_bridge import load_equity_bridge
 from packages.core_finance.beta import relever_beta
@@ -398,6 +398,7 @@ def _dcf_snapshot(
     risk_free_rate: float,
     equity_risk_premium: float,
     bridge_loader=load_equity_bridge,
+    currency_check: Callable[[str], str | None] = statement_currency_mismatch,
 ) -> dict[str, float | str]:
     with perf_timer(scope="calculation", operation="calculation.dcf_upside", ticker=ticker, component="corporate_comparison"):
         current_price = price_loader(ticker)
@@ -417,7 +418,13 @@ def _dcf_snapshot(
         # earned $1B and every cash-burning one at +$1B (ERROR-LOG 2026-09-26). A path that
         # is not admissible is refused, not valued.
         projected_fcff = [float(metrics.fcff) * ((1 + growth_rate) ** year) for year in range(1, 6)]
-        dcf_refusal = None if fcff_path_is_admissible(projected_fcff) else "non_positive_fcff"
+        # Statements and price in different currencies make no value per share (ERROR-LOG
+        # 2026-11-03), so the row is refused before the FCFF test, like fair_value.py.
+        currency_reason = currency_check(ticker)
+        dcf_refusal = (
+            "currency_mismatch" if currency_reason is not None
+            else None if fcff_path_is_admissible(projected_fcff) else "non_positive_fcff"
+        )
         enterprise_value = (
             enterprise_present_value(projected_fcff, terminal_growth, wacc) if dcf_refusal is None else None
         )
@@ -450,7 +457,7 @@ def _dcf_snapshot(
             if intrinsic_value_per_share is not None
             else enterprise_value
         )
-        implied = _implied_return(
+        implied = ImpliedReturn(rate=None, refusal="currency_mismatch") if currency_reason is not None else _implied_return(
             fcff=float(metrics.fcff),
             growth_rate=growth_rate,
             terminal_growth=terminal_growth,

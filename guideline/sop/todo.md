@@ -199,7 +199,7 @@ Spec: `docs/superpowers/specs/2026-10-18-risk-signal-design.md`. Plan (watchlist
   - The matrix plots real same-sector peers.
   - The U-curve is removed, and the chart is renamed "Bottom-up Beta".
   - Fixed along the way: the DCF breakdown's CRP unit (80%).
-  - Open: TSM's TWD-vs-USD DCF (ERROR-LOG 2026-11-03).
+  - TSM's TWD-vs-USD DCF: fixed 2026-11-03 by refusing `currency_mismatch` in the 5-year DCF, the bulk report and the comparison table (13 tickers). FX conversion is not done (ERROR-LOG 2026-11-03).
 
   Remaining "예시값": the regional hurdle bars and the Operating beta bar. one Ke for card and WACC (D2), P4 real peer points and CRP by listing country (D3), with a before/after watchlist table first.
 

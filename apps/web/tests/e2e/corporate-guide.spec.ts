@@ -268,3 +268,28 @@ test.describe("the value matrix compares with real same-sector companies", () =>
     await expect(lowerPanel(page).getByText("Peer A")).toHaveCount(0);
   });
 });
+
+// ERROR-LOG 2026-11-03: a ticker whose statements and price are in different currencies is refused.
+test.describe("a mixed-currency DCF refusal reads as a sentence", () => {
+  for (const [locale, heading, button, text] of [
+    ["en-US", /Corporate Analysis/i, "Refresh DCF", "The statements are in a different currency from the price"],
+    ["ko-KR", "기업 분석", "DCF 새로고침", "재무제표 통화가 주가 통화와 달라서"],
+  ] as const) {
+    test.describe(locale, () => {
+      test.use({ locale });
+      test("the verdict shows why there is no value", async ({ page }) => {
+        await mockCorporatePageApi(page);
+        await page.route("**/api/v1/corporate/dcf/AAPL/stream", (route) => route.fulfill({
+          status: 422, contentType: "application/json",
+          body: JSON.stringify({ detail: { code: "currency_mismatch", message: "AAPL reports in TWD and trades in USD; a value per share would mix the two" } }),
+        }));
+        await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+        await expect(page.getByRole("heading", { name: heading })).toBeVisible({ timeout: 60_000 });
+        await page.getByRole("button", { name: button }).click();
+        const verdict = page.getByTestId("corporate-verdict");
+        await expect(verdict).toHaveAttribute("data-state", "refused");
+        await expect(verdict.getByTestId("dcf-refusal")).toContainText(text);
+      });
+    });
+  }
+});
