@@ -42,7 +42,9 @@ from apps.api.routes import (
     sync_router,
     valuation_router,
 )
+from apps.api.routes.corporate import assumptions_refused_response
 from apps.api.services.db import get_db, init_db
+from apps.api.services.market_assumptions import AssumptionsRefused
 from apps.api.services.market_data import MarketDataService
 from apps.api.routes.signals import router as signals_router
 from apps.api.routes.risk import router as risk_router
@@ -258,6 +260,7 @@ app.include_router(portfolio_router, prefix="/api/v1/portfolio", tags=["Portfoli
 app.include_router(detail_router, prefix="/api/v1/detail", tags=["Detail"])
 app.include_router(news_router, prefix="/api/v1/news", tags=["News"])
 app.include_router(corporate_router, prefix="/api/v1/corporate", tags=["Corporate"])
+app.add_exception_handler(AssumptionsRefused, assumptions_refused_response)
 app.include_router(diagnostic_router, prefix="/api/v1/diagnostic", tags=["Diagnostic"])
 app.include_router(dev_monitor_router, prefix="/api/v1/dev", tags=["Dev Monitor"])
 app.include_router(report_router, prefix="/api/v1/report", tags=["Report"])

@@ -19,6 +19,7 @@ from apps.api.models.schemas import ValuationAssumptions
 from apps.api.routes import corporate as corporate_route
 from apps.api.services.corporate_dcf import build_dcf_full_report
 from packages.core_finance.terminal_growth import SAFETY_MARGIN, TERMINAL_GROWTH_CEILING
+from tests.api.seed_assumptions import SEED_ASSUMPTIONS
 
 
 def _watchlist_tickers(limit: int | None = None, json_path: Path | None = None) -> list[str]:
@@ -64,9 +65,9 @@ def _report(ticker: str = "AAPL"):
         params=params,
         current_price_loader=corporate_route._latest_market_price,
         metrics_loader=corporate_route._metrics_for_ticker,
-        risk_free_rate=corporate_route.DEFAULT_RISK_FREE_RATE,
-        equity_risk_premium=corporate_route.DEFAULT_EQUITY_RISK_PREMIUM,
-        country_risk_premium=corporate_route.KOREA_COUNTRY_RISK_PREMIUM,
+        risk_free_rate=SEED_ASSUMPTIONS.rf_fraction,
+        equity_risk_premium=SEED_ASSUMPTIONS.erp_fraction,
+        country_risk_premium=SEED_ASSUMPTIONS.crp_non_mature,
     )
 
 
@@ -83,9 +84,9 @@ def _report_from_params(params: ValuationAssumptions, *, ticker: str = "AAPL"):
         params=params,
         current_price_loader=corporate_route._latest_market_price,
         metrics_loader=corporate_route._metrics_for_ticker,
-        risk_free_rate=corporate_route.DEFAULT_RISK_FREE_RATE,
-        equity_risk_premium=corporate_route.DEFAULT_EQUITY_RISK_PREMIUM,
-        country_risk_premium=corporate_route.KOREA_COUNTRY_RISK_PREMIUM,
+        risk_free_rate=SEED_ASSUMPTIONS.rf_fraction,
+        equity_risk_premium=SEED_ASSUMPTIONS.erp_fraction,
+        country_risk_premium=SEED_ASSUMPTIONS.crp_non_mature,
     )
 
 

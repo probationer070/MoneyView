@@ -14,7 +14,16 @@ from apps.api.models.schemas import (
     CorporateMetricAuditInput,
     CorporateMetrics,
 )
+from apps.api.models.schema_parts.corporate import WaccRefusal
 from apps.api.services.acquisition.store import load_statement_bundle
+from apps.api.services.db import get_db
+from apps.api.services.market_assumptions import (
+    Assumptions,
+    AssumptionsMissing,
+    AssumptionsRefused,
+    capm_cost_of_equity_pct,
+    resolve_assumptions,
+)
 from packages.core_finance.corporate_statement_metrics import NumericRule
 
 logger = setup_logger(__name__)
@@ -29,9 +38,6 @@ REVENUE_LABELS = ("Total Revenue", "Operating Revenue")
 OPERATING_INCOME_LABELS = ("Operating Income", "EBIT")
 EQUITY_LABELS = ("Stockholders Equity", "Total Equity Gross Minority Interest")
 
-DEFAULT_RISK_FREE_RATE = 0.042
-DEFAULT_EQUITY_RISK_PREMIUM = 0.055
-KOREA_COUNTRY_RISK_PREMIUM = 0.8
 # Country risk follows where the business reports, not the fixed Korea premium for every ticker
 # (plan 2026-11-02-corporate-explainers §6.5, D3, owner 2026-11-03). Every watchlist ticker is
 # US-listed, so listing country says nothing; the reporting currency separates the US, Canadian
@@ -40,10 +46,38 @@ KOREA_COUNTRY_RISK_PREMIUM = 0.8
 MATURE_MARKET_REPORTING_CURRENCIES = frozenset({"USD", "CAD", "EUR"})
 
 
-def country_risk_premium_for(financial_currency: object) -> float:
-    """Percent: 0 for a mature-market reporting currency, else the 0.8% assumption."""
+def country_risk_premium_for(financial_currency: object, crp_non_mature: Optional[float] = None) -> Optional[float]:
+    """Percent: 0 for a mature-market reporting currency, else the dated non-mature assumption.
+
+    `crp_non_mature` comes from the caller's resolver result; omitted, it is resolved from the local
+    DB. None when the currency is not mature-market and no assumption is on file (the caller refuses).
+    """
     currency = str(financial_currency or "").strip().upper()
-    return 0.0 if currency in MATURE_MARKET_REPORTING_CURRENCIES else KOREA_COUNTRY_RISK_PREMIUM
+    if currency in MATURE_MARKET_REPORTING_CURRENCIES:
+        return 0.0
+    if crp_non_mature is not None:
+        return crp_non_mature
+    return _crp_of(_resolved_assumptions(None))
+
+
+def _resolved_assumptions(assumptions: Optional[Assumptions | AssumptionsMissing]) -> Assumptions | AssumptionsMissing:
+    """The caller's resolver result, or one resolved now from the local DB. Never a literal."""
+    if assumptions is not None:
+        return assumptions
+    with get_db() as conn:
+        return resolve_assumptions(conn, datetime.now(timezone.utc))
+
+
+def resolved_riskfree_fraction() -> float:
+    """The resolver's risk-free rate as a fraction, for builders whose own default used to be a constant."""
+    resolved = _resolved_assumptions(None)
+    if isinstance(resolved, AssumptionsMissing):
+        raise AssumptionsRefused(resolved.missing)
+    return resolved.rf_fraction
+
+
+def _crp_of(assumptions: Assumptions | AssumptionsMissing) -> Optional[float]:
+    return assumptions.crp_non_mature if isinstance(assumptions, Assumptions) else None
 
 
 @dataclass(frozen=True)
@@ -696,10 +730,12 @@ def yahoo_statement_metrics(
     growth_year: Optional[int] = None,
     roic_year: Optional[int] = None,
     bundle_loader=get_yahoo_statement_bundle,
+    assumptions: Optional[Assumptions | AssumptionsMissing] = None,
 ) -> Optional[CorporateMetrics]:
     bundle = bundle_loader(ticker, "metrics")
     if bundle is None:
         return None
+    assumptions = _resolved_assumptions(assumptions)
     income = bundle["income"]
     balance = bundle["balance"]
     cashflow = bundle["cashflow"]
@@ -862,9 +898,15 @@ def yahoo_statement_metrics(
     cost_of_debt = min(max((latest_interest / latest_debt) if _has_positive_debt_balance(latest_debt) else 0.045, 0.01), 0.15)
     debt_weight = (debt_ratio or fallback.debt_ratio) / 100
     equity_weight = 1 - debt_weight
-    country_risk_premium = country_risk_premium_for(info.get("financialCurrency"))
-    cost_of_equity = DEFAULT_RISK_FREE_RATE + levered_beta * DEFAULT_EQUITY_RISK_PREMIUM + country_risk_premium / 100
-    wacc = (equity_weight * cost_of_equity + debt_weight * cost_of_debt * (1 - tax_rate)) * 100
+    country_risk_premium = country_risk_premium_for(info.get("financialCurrency"), _crp_of(assumptions))
+    if country_risk_premium is None:
+        country_risk_premium = float(fallback.crp)
+    if isinstance(assumptions, Assumptions):
+        cost_of_equity = capm_cost_of_equity_pct(assumptions, levered_beta, country_risk_premium) / 100
+        wacc = (equity_weight * cost_of_equity + debt_weight * cost_of_debt * (1 - tax_rate)) * 100
+    else:
+        cost_of_equity = None
+        wacc = None
     logger.info(
         "corporate.statement_derived ticker=%s growth_basis=%s growth_year=%s roic_basis=%s roic_year=%s "
         "revenue_years=%s annual_growth_years=%s roic_years=%s debt_years=%s equity_years=%s "
@@ -882,7 +924,7 @@ def yahoo_statement_metrics(
         round(growth_output, 4) if growth_output is not None else None,
         round(roic_output, 4) if roic_output is not None else None,
         round(debt_ratio, 4) if debt_ratio is not None else None,
-        round(wacc, 4),
+        round(wacc, 4) if wacc is not None else None,
     )
 
     return CorporateMetrics(
@@ -893,12 +935,13 @@ def yahoo_statement_metrics(
         roic=round(roic_output, 2),
         roic_legacy=round(float(fallback.roic), 2),
         roic_stable_v2=round(float(derived_roic), 2) if derived_roic is not None else None,
-        wacc=round(wacc, 2),
+        wacc=round(wacc, 2) if wacc is not None else None,
         debt_ratio=round(debt_ratio if debt_ratio is not None else fallback.debt_ratio, 2),
         unlevered_beta=round(unlevered_beta, 2),
         tax_rate=round(tax_rate, 6),
         levered_beta=round(levered_beta, 4),
-        cost_of_equity=round(cost_of_equity * 100, 4),
+        cost_of_equity=round(cost_of_equity * 100, 4) if cost_of_equity is not None else None,
+        wacc_refusal=None if cost_of_equity is not None else WaccRefusal(code=assumptions.code, missing=list(assumptions.missing)),
         crp=country_risk_premium,
         reinvestment=round(reinvestment if reinvestment is not None else fallback.reinvestment, 2),
         fcff=round(fcff_billions if fcff_billions is not None else fallback.fcff, 2),
@@ -1314,6 +1357,7 @@ def metric_audit_for_ticker(
     roic_basis: str = "recent_average",
     roic_year: Optional[int] = None,
     bundle_loader=get_yahoo_statement_bundle,
+    assumptions: Optional[Assumptions | AssumptionsMissing] = None,
 ) -> CorporateMetricAudit:
     ticker = ticker.upper()
     with perf_timer(
@@ -1431,8 +1475,11 @@ def metric_audit_for_ticker(
             debt_to_equity = _statement_debt_to_equity(latest_debt=latest_debt, latest_equity=latest_equity, fallback=fallback)
             levered_beta = float(info.get("beta") or fallback.unlevered_beta * (1 + (1 - tax_rate) * debt_to_equity))
             cost_of_debt = min(max((latest_interest / latest_debt) if _has_positive_debt_balance(latest_debt) else 0.045, 0.01), 0.15)
-            country_risk_premium = country_risk_premium_for(info.get("financialCurrency"))
-            cost_of_equity = DEFAULT_RISK_FREE_RATE + levered_beta * DEFAULT_EQUITY_RISK_PREMIUM + country_risk_premium / 100
+            assumptions = _resolved_assumptions(assumptions)
+            if isinstance(assumptions, AssumptionsMissing):
+                raise AssumptionsRefused(assumptions.missing)
+            country_risk_premium = country_risk_premium_for(info.get("financialCurrency"), assumptions.crp_non_mature)
+            cost_of_equity = capm_cost_of_equity_pct(assumptions, levered_beta, country_risk_premium) / 100
             market_cap = float(info.get("marketCap") or 0.0) or None
             debt_weight, equity_weight = _capital_weights(
                 market_cap=market_cap,
@@ -1587,10 +1634,10 @@ def metric_audit_for_ticker(
                     warnings=wacc_warnings,
                     confidence=_metric_confidence(wacc_quality, "supporting"),
                     inputs_used=[
-                        _audit_input(field="risk_free_rate", label="Risk-free rate", value=round(DEFAULT_RISK_FREE_RATE, 6), display_value=_display_percent(DEFAULT_RISK_FREE_RATE * 100), source="Model policy input"),
+                        _audit_input(field="risk_free_rate", label="Risk-free rate", value=round(assumptions.rf_fraction, 6), display_value=_display_percent(assumptions.risk_free_rate), source=assumptions.risk_free_source),
                         _audit_input(field="beta", label="Beta", value=round(levered_beta, 6), display_value=_display_number(round(levered_beta, 6), precision=2), source=wacc_source),
-                        _audit_input(field="equity_risk_premium", label="Equity risk premium", value=round(DEFAULT_EQUITY_RISK_PREMIUM, 6), display_value=_display_percent(DEFAULT_EQUITY_RISK_PREMIUM * 100), source="Model policy input"),
-                        _audit_input(field="country_risk_premium", label="Country risk premium", value=round(country_risk_premium / 100, 6), display_value=_display_percent(country_risk_premium), source="By reporting currency: USD, CAD, EUR 0%; otherwise 0.8%"),
+                        _audit_input(field="equity_risk_premium", label="Equity risk premium", value=round(assumptions.erp_fraction, 6), display_value=_display_percent(assumptions.equity_risk_premium), source=assumptions.erp_source),
+                        _audit_input(field="country_risk_premium", label="Country risk premium", value=round(country_risk_premium / 100, 6), display_value=_display_percent(country_risk_premium), source=f"By reporting currency: USD, CAD, EUR 0%; otherwise {assumptions.crp_non_mature:g}%"),
                         _audit_input(field="cost_of_equity", label="Cost of equity", value=round(cost_of_equity, 6), display_value=_display_percent(cost_of_equity * 100), source="Risk-free rate + beta x ERP + CRP"),
                         _audit_input(field="total_debt", label="Total debt", value=latest_debt, display_value=_display_money(latest_debt), source=wacc_source),
                         _audit_input(field="market_cap", label="Market cap", value=market_cap, display_value=_display_money(market_cap), source="Yahoo Finance company profile"),
@@ -1635,10 +1682,15 @@ def metric_audit_for_ticker(
         return audit
 
 
-def yahoo_metric_history(ticker: str, bundle_loader=get_yahoo_statement_bundle) -> Optional[dict[str, object]]:
+def yahoo_metric_history(
+    ticker: str,
+    bundle_loader=get_yahoo_statement_bundle,
+    assumptions: Optional[Assumptions | AssumptionsMissing] = None,
+) -> Optional[dict[str, object]]:
     bundle = bundle_loader(ticker, "history")
     if bundle is None:
         return None
+    assumptions = _resolved_assumptions(assumptions)
     income = bundle["income"]
     balance = bundle["balance"]
     quarterly_income = bundle["quarterly_income"]
@@ -1695,7 +1747,7 @@ def yahoo_metric_history(ticker: str, bundle_loader=get_yahoo_statement_bundle) 
     return {
         "ticker": ticker,
         "start_year": YAHOO_STATEMENT_START_YEAR,
-        "country_risk_premium": country_risk_premium_for(bundle["info"].get("financialCurrency")),
+        "country_risk_premium": country_risk_premium_for(bundle["info"].get("financialCurrency"), _crp_of(assumptions)),
         "growth_calculation_version": "growth_v2_stable_cagr",
         "growth_cagr": growth_payload["growth_cagr"],
         "growth_recent_average": growth_payload["growth_recent_average"],

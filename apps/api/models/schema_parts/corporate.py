@@ -250,7 +250,7 @@ class CorporateMetrics(BaseModel):
     roic: float = 18.0
     roic_legacy: float | None = None
     roic_stable_v2: float | None = None
-    wacc: float = 10.0
+    wacc: float | None = 10.0
     debt_ratio: float = 18.0
     unlevered_beta: float = 1.05
     # The tax rate `unlevered_beta` was unlevered with, so CAPM can relever with the same

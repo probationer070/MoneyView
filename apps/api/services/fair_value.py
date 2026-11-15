@@ -20,7 +20,7 @@ from apps.api.services.company_baseline import (
 )
 from apps.api.services.corporate_metrics_service import metrics_for_ticker_with_provenance
 from apps.api.services.corporate_statement_metrics import (
-    DEFAULT_RISK_FREE_RATE,
+    resolved_riskfree_fraction,
     get_yahoo_statement_bundle,
     statement_baseline,
 )
@@ -51,7 +51,7 @@ def generate_fair_value_case_for_ticker(
     *,
     as_of: str | None = None,
     base_year: int | None = None,
-    riskfree_rate: float = DEFAULT_RISK_FREE_RATE,
+    riskfree_rate: float | None = None,
     marginal_tax_rate: float = DEFAULT_MARGINAL_TAX_RATE,
     bundle_loader=get_yahoo_statement_bundle,
 ) -> tuple[int | None, bool, str | None, str | None]:
@@ -61,6 +61,8 @@ def generate_fair_value_case_for_ticker(
     request is safe. Refusal reasons keep their prefix (spec §4).
     """
     ticker = ticker.upper()
+    if riskfree_rate is None:
+        riskfree_rate = resolved_riskfree_fraction()
     industry, vintage, reason = industry_row_for_ticker(ticker, as_of=as_of)
     if industry is None:
         return None, False, None, reason

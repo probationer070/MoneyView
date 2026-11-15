@@ -9,6 +9,7 @@ import pytest
 
 from apps.api.models.schemas import CorporateMetrics
 from apps.api.services.corporate_statement_metrics import yahoo_statement_metrics
+from tests.api.seed_assumptions import SEED_ASSUMPTIONS
 
 BILLION = 1_000_000_000.0
 
@@ -47,7 +48,7 @@ def _metrics(beta: float):
         "quarterly_income": empty, "quarterly_balance": empty, "quarterly_cashflow": empty,
         "info": {"beta": beta}, "fetched_at": None,
     }
-    metrics = yahoo_statement_metrics("TEST", _fallback(), bundle_loader=lambda t, e: bundle)
+    metrics = yahoo_statement_metrics("TEST", _fallback(), bundle_loader=lambda t, e: bundle, assumptions=SEED_ASSUMPTIONS)
     assert metrics is not None
     return metrics
 

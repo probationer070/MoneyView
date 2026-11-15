@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from packages.core_finance.refusals import EngineRefusal
 
@@ -53,14 +53,9 @@ from apps.api.services.corporate_dcf import (
     partition_valuable_tickers,
 )
 from apps.api.services.db import get_db
-from apps.api.services.market_assumptions import AssumptionsMissing, resolve_assumptions
+from apps.api.services.market_assumptions import Assumptions, AssumptionsMissing, AssumptionsRefused, resolve_assumptions
 from apps.api.models.schema_parts.corporate import AssumptionsOut, WaccRefusal
 from apps.api.services.corporate_statement_metrics import (
-    DEFAULT_EQUITY_RISK_PREMIUM,
-    DEFAULT_RISK_FREE_RATE,
-    # No longer passed to the DCF (each ticker's own premium is, plan 2026-11-02 §6.5); kept as
-    # the route's named constant, which tests/api/test_terminal_diagnostics.py reads.
-    KOREA_COUNTRY_RISK_PREMIUM,  # noqa: F401
     YAHOO_STATEMENT_START_YEAR,
     get_yahoo_statement_bundle,
     metric_audit_for_ticker,
@@ -93,12 +88,32 @@ def _get_yahoo_statement_bundle(ticker: str, endpoint: str) -> Optional[dict[str
     return get_yahoo_statement_bundle(ticker, endpoint)
 
 
+def _resolve_assumptions_now() -> Assumptions | AssumptionsMissing:
+    with get_db() as conn:
+        return resolve_assumptions(conn, datetime.now(timezone.utc))
+
+
+def _fractions_or_refuse() -> Assumptions:
+    """The resolver result for builders that take fractions; a refusal becomes the `assumptions_missing` payload."""
+    resolved = _resolve_assumptions_now()
+    if isinstance(resolved, AssumptionsMissing):
+        raise AssumptionsRefused(resolved.missing)
+    return resolved
+
+
+def assumptions_refused_response(_request: Request, exc: AssumptionsRefused) -> JSONResponse:
+    """HTTP 200 with no number: never a silent default (plan 2026-11-16 section 2)."""
+    refusal = {"code": exc.code, "missing": list(exc.missing)}
+    return JSONResponse(status_code=200, content={"status": "unavailable", "reason": exc.code, "wacc_refusal": refusal})
+
+
 def _metrics_for_ticker(
     ticker: str,
     growth_basis: str = "cagr",
     roic_basis: str = "recent_average",
     growth_year: Optional[int] = None,
     roic_year: Optional[int] = None,
+    assumptions: Optional[Assumptions | AssumptionsMissing] = None,
 ) -> CorporateMetrics:
     with perf_timer(scope="calculation", operation="ticker.metrics", ticker=ticker) as span_metadata:
         metrics = corporate_metrics_service.metrics_for_ticker(
@@ -108,6 +123,7 @@ def _metrics_for_ticker(
             growth_year=growth_year,
             roic_year=roic_year,
             bundle_loader=_get_yahoo_statement_bundle,
+            assumptions=assumptions,
         )
         span_metadata["rows"] = 1
         return metrics
@@ -171,6 +187,7 @@ def get_corporate_comparison(
 ):
     """Return cross-stock comparison rows for the current target-stock universe."""
     _seed_watchlist_from_json_if_empty()
+    assumptions = _fractions_or_refuse()
     response = build_corporate_comparison_response(
         mode=mode,
         comparison_universe=comparison_universe,
@@ -179,8 +196,8 @@ def get_corporate_comparison(
         metrics_loader=_metrics_for_ticker,
         price_loader=_latest_market_price,
         default_companies=DEFAULT_COMPANIES,
-        risk_free_rate=DEFAULT_RISK_FREE_RATE,
-        equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
+        risk_free_rate=assumptions.rf_fraction,
+        equity_risk_premium=assumptions.erp_fraction,
     )
     return APIResponse(
         data=response,
@@ -199,6 +216,7 @@ def refresh_corporate_comparison_snapshot(
     """Recompute and persist today's comparison snapshot."""
     _seed_watchlist_from_json_if_empty()
     parsed_custom_tickers = [ticker for ticker in custom_tickers.split(",") if ticker.strip()]
+    assumptions = _fractions_or_refuse()
 
     # One button: refresh only the datasets whose freshness boundaries have expired, then
     # compute. Separate fetch and compute buttons would let a snapshot be generated from
@@ -221,8 +239,8 @@ def refresh_corporate_comparison_snapshot(
         metrics_loader=_metrics_for_ticker,
         price_loader=_latest_market_price,
         default_companies=DEFAULT_COMPANIES,
-        risk_free_rate=DEFAULT_RISK_FREE_RATE,
-        equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
+        risk_free_rate=assumptions.rf_fraction,
+        equity_risk_premium=assumptions.erp_fraction,
     )
     return APIResponse(
         data=response,
@@ -317,14 +335,15 @@ def dynamic_dcf_model(ticker: str, params: ValuationAssumptions):
     """
     Lightweight non-streaming DCF summary response kept for compatibility paths.
     """
+    assumptions = _fractions_or_refuse()
     try:
         summary, assumption_summary = build_dcf_summary(
             ticker=ticker,
             params=params,
             current_price_loader=_latest_market_price,
             metrics_loader=_metrics_for_ticker,
-            risk_free_rate=DEFAULT_RISK_FREE_RATE,
-            equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
+            risk_free_rate=assumptions.rf_fraction,
+            equity_risk_premium=assumptions.erp_fraction,
             currency_check=statement_currency_mismatch,
         )
     except EngineRefusal as exc:
@@ -339,14 +358,15 @@ def dynamic_dcf_model(ticker: str, params: ValuationAssumptions):
 @router.post("/dcf/{ticker}/report", response_model=APIResponse[DCFFullReport])
 def get_dcf_full_report(ticker: str, params: ValuationAssumptions):
     """Return the full DCF report only on explicit request."""
+    assumptions = _fractions_or_refuse()
     try:
         report = build_dcf_full_report(
             ticker=ticker,
             params=params,
             current_price_loader=_latest_market_price,
             metrics_loader=_metrics_for_ticker,
-            risk_free_rate=DEFAULT_RISK_FREE_RATE,
-            equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
+            risk_free_rate=assumptions.rf_fraction,
+            equity_risk_premium=assumptions.erp_fraction,
             currency_check=statement_currency_mismatch,
         )
     except EngineRefusal as exc:
@@ -372,6 +392,7 @@ def get_bulk_dcf_reports(request: CorporateDcfBatchRequest):
             )
         }
     valuable, not_companies = partition_valuable_tickers(request.tickers, instrument_types)
+    assumptions = _fractions_or_refuse()
 
     result = build_bulk_dcf_reports(
         valuable,
@@ -379,8 +400,8 @@ def get_bulk_dcf_reports(request: CorporateDcfBatchRequest):
         metrics_loader=_metrics_for_ticker,
         valuation_params_builder=_valuation_params_from_metrics,
         report_builder=build_dcf_full_report,
-        risk_free_rate=DEFAULT_RISK_FREE_RATE,
-        equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
+        risk_free_rate=assumptions.rf_fraction,
+        equity_risk_premium=assumptions.erp_fraction,
         currency_check=statement_currency_mismatch,
     )
     # `skipped` travels with the reports rather than being logged and dropped. A batch
@@ -399,14 +420,15 @@ async def stream_dcf_summary(request: Request, ticker: str, params: ValuationAss
     # Computed before the stream opens: a refusal raised inside the generator would arrive
     # after the 200 headers, as a stream that dies. Here it is a 422 the client can read.
     started_at = time.perf_counter()
+    assumptions = _fractions_or_refuse()
     try:
         summary, assumption_summary = build_dcf_summary(
             ticker=ticker,
             params=params,
             current_price_loader=_latest_market_price,
             metrics_loader=_metrics_for_ticker,
-            risk_free_rate=DEFAULT_RISK_FREE_RATE,
-            equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM,
+            risk_free_rate=assumptions.rf_fraction,
+            equity_risk_premium=assumptions.erp_fraction,
             currency_check=statement_currency_mismatch,
         )
     except EngineRefusal as exc:
@@ -467,12 +489,14 @@ async def stream_dcf_summary(request: Request, ticker: str, params: ValuationAss
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
-def _with_assumptions_echo(metrics: CorporateMetrics) -> CorporateMetrics:
-    """S1: report the resolved market assumptions beside the metrics. Ke/WACC are not touched yet."""
-    with get_db() as conn:
-        resolved = resolve_assumptions(conn, datetime.now(timezone.utc))
+def _with_assumptions_echo(metrics: CorporateMetrics, resolved: Assumptions | AssumptionsMissing) -> CorporateMetrics:
+    """Report the market assumptions the metrics were built with; refused means no WACC and no Ke."""
     if isinstance(resolved, AssumptionsMissing):
-        return metrics.model_copy(update={"wacc_refusal": WaccRefusal(code=resolved.code, missing=list(resolved.missing))})
+        return metrics.model_copy(update={
+            "wacc": None,
+            "cost_of_equity": None,
+            "wacc_refusal": WaccRefusal(code=resolved.code, missing=list(resolved.missing)),
+        })
     mature = metrics.crp == 0
     echo = AssumptionsOut(
         risk_free_rate=resolved.risk_free_rate,
@@ -505,14 +529,16 @@ def get_corporate_metrics(
         roic_basis,
         roic_year,
     )
+    resolved = _resolve_assumptions_now()
     metrics = _metrics_for_ticker(
         ticker,
         growth_basis=growth_basis,
         roic_basis=roic_basis,
         growth_year=growth_year,
         roic_year=roic_year,
+        assumptions=resolved,
     )
-    return _with_assumptions_echo(metrics)
+    return _with_assumptions_echo(metrics, resolved)
 
 
 @router.get("/metrics/{ticker}/audit", response_model=CorporateMetricAudit)
@@ -543,7 +569,9 @@ def get_corporate_metric_audit(
 def get_corporate_metric_history(ticker: str):
     ticker = ticker.upper()
     logger.info("corporate.metrics_history_request ticker=%s", ticker)
-    return corporate_metrics_service.metric_history(ticker, bundle_loader=_get_yahoo_statement_bundle)
+    return corporate_metrics_service.metric_history(
+        ticker, bundle_loader=_get_yahoo_statement_bundle, assumptions=_resolve_assumptions_now()
+    )
 
 
 @router.get("/metrics/{ticker}/quarterly-statements")
@@ -555,6 +583,8 @@ def get_corporate_quarterly_statements(ticker: str):
 
 @router.put("/metrics/{ticker}", response_model=CorporateMetrics)
 def save_corporate_metrics(ticker: str, metrics: CorporateMetrics):
+    if metrics.wacc is None:
+        raise HTTPException(status_code=422, detail={"code": "wacc_unavailable", "message": "a refused WACC cannot be saved"})
     saved = corporate_metrics_service.save_metrics(ticker, metrics)
     records_sync.run_records_sync("mutation")
     return saved

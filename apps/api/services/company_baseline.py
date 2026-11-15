@@ -30,7 +30,7 @@ from apps.api.services.conservative_case import (
 )
 from apps.api.services.corporate_metrics_service import metrics_for_ticker
 from apps.api.services.corporate_statement_metrics import (
-    DEFAULT_RISK_FREE_RATE,
+    resolved_riskfree_fraction,
     get_yahoo_statement_bundle,
     statement_baseline,
 )
@@ -170,7 +170,7 @@ def generate_conservative_case_for_ticker(
     *,
     as_of: str | None = None,
     base_year: int | None = None,
-    riskfree_rate: float = DEFAULT_RISK_FREE_RATE,
+    riskfree_rate: float | None = None,
     marginal_tax_rate: float = DEFAULT_MARGINAL_TAX_RATE,
     bundle_loader=get_yahoo_statement_bundle,
 ) -> tuple[int | None, str | None]:
@@ -202,6 +202,8 @@ def generate_conservative_case_for_ticker(
     `not_storable: ... already exists`. That is a safe failure, but it is a
     refusal rather than the differing case the horizon change would imply.
     """
+    if riskfree_rate is None:
+        riskfree_rate = resolved_riskfree_fraction()
     metrics = metrics_for_ticker(ticker, bundle_loader=bundle_loader)
     bridge = load_equity_bridge(ticker, bundle_loader=bundle_loader)
 

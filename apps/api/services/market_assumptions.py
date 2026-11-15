@@ -126,3 +126,20 @@ def resolve_assumptions(conn: sqlite3.Connection, now: datetime) -> Assumptions 
         crp_as_of=crp_row["as_of"],
         stale=tuple(stale),
     )
+
+
+class AssumptionsRefused(Exception):
+    """Raised where a number cannot be produced because the market assumptions are missing.
+
+    Routes turn it into the `assumptions_missing` payload (HTTP 200), never a silent default.
+    """
+
+    def __init__(self, missing: tuple[str, ...]):
+        super().__init__(f"market assumptions missing: {', '.join(missing)}")
+        self.missing = tuple(missing)
+        self.code = "assumptions_missing"
+
+
+def capm_cost_of_equity_pct(a: Assumptions, levered_beta: float, crp_pct: float) -> float:
+    """The one CAPM cost of equity, in percent: rf + beta x ERP + CRP (plan section 3, S2a)."""
+    return a.risk_free_rate + levered_beta * a.equity_risk_premium + crp_pct

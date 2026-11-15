@@ -14,10 +14,11 @@ from apps.api.models.schemas import (
     CorporateMetrics,
     ValuationAssumptions,
 )
+from apps.api.services.market_assumptions import Assumptions, AssumptionsMissing, AssumptionsRefused
 from apps.api.services.corporate_statement_metrics import (
     DEFAULT_TAX_RATE,
-    KOREA_COUNTRY_RISK_PREMIUM,
     YAHOO_STATEMENT_START_YEAR,
+    _resolved_assumptions,
     get_yahoo_statement_bundle,
     quarterly_statement_rows,
     yahoo_metric_history,
@@ -84,7 +85,6 @@ def default_metrics(ticker: str) -> CorporateMetrics:
         return CorporateMetrics(
             ticker=ticker,
             **DEFAULT_METRICS[ticker],
-            crp=KOREA_COUNTRY_RISK_PREMIUM,
             growth_avg_legacy=DEFAULT_METRICS[ticker]["growth"],
             growth_cagr_v2=DEFAULT_METRICS[ticker]["growth"],
             roic_legacy=DEFAULT_METRICS[ticker]["roic"],
@@ -144,7 +144,6 @@ def default_metrics(ticker: str) -> CorporateMetrics:
         wacc=round(max(wacc, 6.0), 2),
         debt_ratio=round(min(max(debt_ratio, 5.0), 70.0), 2),
         unlevered_beta=round(min(max(unlevered_beta, 0.55), 2.4), 2),
-        crp=KOREA_COUNTRY_RISK_PREMIUM,
         reinvestment=round(24.0 + (seed % 36), 2),
         fcff=round(45.0 + (seed % 140), 2),
         innovation=round(48.0 + (seed % 45), 2),
@@ -224,6 +223,7 @@ def metrics_for_ticker(
     roic_year: Optional[int] = None,
     *,
     bundle_loader: StatementBundleLoader = get_yahoo_statement_bundle,
+    assumptions: Optional[Assumptions | AssumptionsMissing] = None,
 ) -> CorporateMetrics:
     metrics, _ = metrics_for_ticker_with_provenance(
         ticker,
@@ -232,6 +232,7 @@ def metrics_for_ticker(
         growth_year,
         roic_year,
         bundle_loader=bundle_loader,
+        assumptions=assumptions,
     )
     return metrics
 
@@ -244,6 +245,7 @@ def metrics_for_ticker_with_provenance(
     roic_year: Optional[int] = None,
     *,
     bundle_loader: StatementBundleLoader = get_yahoo_statement_bundle,
+    assumptions: Optional[Assumptions | AssumptionsMissing] = None,
 ) -> tuple[CorporateMetrics, bool]:
     """Like `metrics_for_ticker`, but also reports whether the figures are real.
 
@@ -255,6 +257,7 @@ def metrics_for_ticker_with_provenance(
     (e.g. `investment_decision`) must check this before storing them as captured.
     """
     ticker = ticker.upper()
+    assumptions = _resolved_assumptions(assumptions)
     fallback, fallback_is_real = load_fallback_metrics(ticker)
     computed = yahoo_statement_metrics(
         ticker,
@@ -264,13 +267,14 @@ def metrics_for_ticker_with_provenance(
         growth_year=growth_year,
         roic_year=roic_year,
         bundle_loader=bundle_loader,
+        assumptions=assumptions,
     )
     if computed is not None:
         return computed, True
     return (
         fallback.model_copy(
             update={
-                "crp": KOREA_COUNTRY_RISK_PREMIUM,
+                **({"crp": assumptions.crp_non_mature} if isinstance(assumptions, Assumptions) else {}),
                 "growth_avg_legacy": fallback.growth,
                 "growth_cagr_v2": fallback.growth,
                 "roic_legacy": fallback.roic,
@@ -395,12 +399,18 @@ def add_company(company: CorporateCompany) -> CorporateCompany:
     return payload
 
 
-def metric_history(ticker: str, *, bundle_loader: StatementBundleLoader = get_yahoo_statement_bundle) -> dict[str, object]:
+def metric_history(
+    ticker: str,
+    *,
+    bundle_loader: StatementBundleLoader = get_yahoo_statement_bundle,
+    assumptions: Optional[Assumptions | AssumptionsMissing] = None,
+) -> dict[str, object]:
     ticker = ticker.upper()
-    return yahoo_metric_history(ticker, bundle_loader=bundle_loader) or {
+    assumptions = _resolved_assumptions(assumptions)
+    return yahoo_metric_history(ticker, bundle_loader=bundle_loader, assumptions=assumptions) or {
         "ticker": ticker,
         "start_year": YAHOO_STATEMENT_START_YEAR,
-        "country_risk_premium": KOREA_COUNTRY_RISK_PREMIUM,
+        "country_risk_premium": assumptions.crp_non_mature if isinstance(assumptions, Assumptions) else None,
         "growth_calculation_version": "growth_v2_stable_cagr",
         "growth_cagr": None,
         "growth_recent_average": None,
@@ -512,6 +522,9 @@ def valuation_params_from_metrics(metrics: CorporateMetrics) -> ValuationAssumpt
         minimum=-1.0,
         maximum=1.0,
     )
+    if metrics.wacc is None:
+        refusal = metrics.wacc_refusal
+        raise AssumptionsRefused(tuple(refusal.missing) if refusal else ())
     wacc = max(float(metrics.wacc) / 100, 0.001)
     # Three bounds, three jobs. `wacc - safety_margin` used to carry the economic ceiling's
     # work as well as its own, which pinned terminal growth 50bp below WACC for 23 of 40

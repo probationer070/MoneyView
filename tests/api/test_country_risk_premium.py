@@ -11,6 +11,7 @@ from apps.api.models.schema_parts.corporate import BridgeInputMeta, BridgeSource
 from apps.api.models.schemas import CorporateMetrics
 from apps.api.services.corporate_dcf import _build_dcf_outputs
 from apps.api.services.corporate_statement_metrics import country_risk_premium_for, yahoo_statement_metrics
+from tests.api.seed_assumptions import SEED_ASSUMPTIONS
 from apps.api.services.equity_bridge import EquityBridge
 
 BILLION = 1_000_000_000.0
@@ -55,7 +56,7 @@ def _metrics(currency):
         "quarterly_income": empty, "quarterly_balance": empty, "quarterly_cashflow": empty,
         "info": {"beta": 1.2, "financialCurrency": currency}, "fetched_at": None,
     }
-    metrics = yahoo_statement_metrics("TEST", _fallback(), bundle_loader=lambda t, e: bundle)
+    metrics = yahoo_statement_metrics("TEST", _fallback(), bundle_loader=lambda t, e: bundle, assumptions=SEED_ASSUMPTIONS)
     assert metrics is not None
     return metrics
 
