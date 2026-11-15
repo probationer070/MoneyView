@@ -9,11 +9,14 @@ import type { Locale } from "@/lib/i18n/locale";
  */
 export class DcfRefusalError extends Error {
   readonly code: string;
+  /** The assumption keys the route reports missing (assumptions_missing only); null when not sent. */
+  readonly missing: string[] | null;
 
-  constructor(code: string, message: string) {
+  constructor(code: string, message: string, missing: string[] | null = null) {
     super(message);
     this.name = "DcfRefusalError";
     this.code = code;
+    this.missing = missing;
   }
 
   /**

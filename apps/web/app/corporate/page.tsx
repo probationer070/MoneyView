@@ -40,6 +40,7 @@ import { substitutedFormula } from "./substitutedFormula";
 import { buildFormulaContext } from "./formulaContext";
 import { historicalPriceStatus, quarterlyStatementsStatus } from "./detailStatus";
 import type { CalculationDetailKey } from "./components/calculationDetailTypes";
+import { readableMissing } from "./components/AssumptionSourceCaption";
 import {
   ACTIVE_TICKER_SESSION_KEY,
   COMPARISON_CACHE_KEY,
@@ -923,7 +924,11 @@ export default function CorporateAnalysisPage() {
     : null;
   // The full report needs a DCF result to be on screen, and a refusal blocks it.
   const canLoadFullReport = dcfRefusal === null && !(!dcfData && dcfStreamStatus === "idle");
-  const verdict = verdictView(dcfData, dcfStreamStatus === "streaming", dcfRefusal?.readerTextIn(locale) ?? null); // block + strip, spec §2A
+  // A refusal that names its missing inputs says which ones, after the shared sentence.
+  const dcfRefusalText = dcfRefusal
+    ? [dcfRefusal.readerTextIn(locale), dcfRefusal.missing?.length ? t("valuation.refusal.assumptions_missing_named", { missing: readableMissing(dcfRefusal.missing, t) }) : null].filter(Boolean).join(" ")
+    : null;
+  const verdict = verdictView(dcfData, dcfStreamStatus === "streaming", dcfRefusalText); // block + strip, spec §2A
 
   return (
     <div className="mx-auto flex h-[calc(100dvh_-_var(--main-pad-top,0px)_-_var(--main-pad-bottom,0px))] max-w-7xl flex-col">
@@ -1080,6 +1085,7 @@ export default function CorporateAnalysisPage() {
           detailKey={activeCalculation}
           substitutedFormula={activeSubstitutedFormula}
           sliderWacc={assumptions.wacc}
+          refusedMissing={refusedMissing}
           dcfStatus={dcfData?.status ?? null}
           dcfGeneratedAt={dcfData?.generated_at ?? null}
           dcfSnapshot={activeDcfSnapshot}

@@ -264,6 +264,7 @@ export const ko: Messages = {
       non_positive_target_capital: "목표 연도의 투하자본이 0 이하여서 한계수익률을 가중할 수 없습니다.",
       rate_schedule_length_mismatch: "연도별 세율 목록의 길이가 예측 연도 수와 맞지 않습니다.",
       assumptions_missing: "무위험수익률 또는 주식위험프리미엄이 없어 가치를 산정하지 않았습니다. 시장 가정에서 입력하십시오.",
+      assumptions_missing_named: "누락된 입력: {missing}.",
       wacc_not_above_growth: "할인율이 성장률을 넘지 않아 고든 성장 모형의 가치를 계산할 수 없습니다.",
       non_positive_shares: "희석 주식 수가 0 이하여서 주당 가치를 구할 수 없습니다.",
       conflicting_share_inputs: "공모가가 이미 신주 수를 정하므로 신주 수와 공모가는 함께 입력할 수 없습니다.",

@@ -261,6 +261,7 @@ export const en = {
       non_positive_target_capital: "The target-year capital is zero or negative, so the marginal return cannot be weighted.",
       rate_schedule_length_mismatch: "The per-year tax rate schedule does not have one rate for each forecast year.",
       assumptions_missing: "No risk-free rate or equity risk premium is on file, so nothing is valued. Enter one under Market assumptions.",
+      assumptions_missing_named: "Missing: {missing}.",
       wacc_not_above_growth: "The discount rate does not exceed the growth rate, so the Gordon growth value is undefined.",
       non_positive_shares: "The diluted share count is zero or negative, so no value per share can be set.",
       conflicting_share_inputs: "New shares and an offering price were both given, but only one can set the new share count.",

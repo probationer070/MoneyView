@@ -16,6 +16,7 @@ import { SensitivityTab } from "./detail/SensitivityTab";
 import { StepsTab } from "./detail/StepsTab";
 import { SummaryTab } from "./detail/SummaryTab";
 import { TrendTab, type TrendHistory } from "./detail/TrendTab";
+import { WaccRefusedNote } from "./AssumptionSourceCaption";
 import { VerdictStatusLabel } from "./VerdictBlock";
 
 interface CalculationDetailModalProps {
@@ -38,6 +39,8 @@ interface CalculationDetailModalProps {
   comparisonRows: CorporateComparisonRowApi[] | null;
   /** True when the comparison on screen was calculated for another universe. */
   comparisonIsStale: boolean;
+  /** `wacc_refusal.missing` when the WACC is refused (its numbers are dashes); null otherwise. */
+  refusedMissing: string[] | null;
   /** The DCF inputs on screen; the sensitivity tab moves one of them. */
   dcfSnapshot: DcfRequestSnapshot;
   /** The page's own DCF, when calculated: the "current" row of the sensitivity table. */
@@ -90,6 +93,7 @@ export function CalculationDetailModal(props: CalculationDetailModalProps) {
   return (
     <ModalShell open onClose={onClose} title={detail.title} subtitle={`${ticker} · ${detail.result}`} size="xl">
       <div className="flex flex-col gap-4">
+        {props.refusedMissing ? <WaccRefusedNote missing={props.refusedMissing} /> : null}
         <Tabs
           ariaLabel={t("corporate.detail.tabsAria")}
           activeKey={active}

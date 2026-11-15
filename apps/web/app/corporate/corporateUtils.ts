@@ -113,7 +113,10 @@ export async function streamCorporateDcfSummary(
   // No rf/ERP: HTTP 200 JSON {status: "unavailable", reason} instead of an event stream (plan 2026-11-16 section 2).
   if (response.ok && (response.headers.get("content-type") ?? "").includes("application/json")) {
     const body = await response.json();
-    if (body?.status === "unavailable" && typeof body.reason === "string") throw new DcfRefusalError(body.reason, body.reason);
+    if (body?.status === "unavailable" && typeof body.reason === "string") {
+      const missing = Array.isArray(body.wacc_refusal?.missing) ? body.wacc_refusal.missing as string[] : null;
+      throw new DcfRefusalError(body.reason, body.reason, missing);
+    }
   }
   if (!response.ok || !response.body) {
     throw new Error(`DCF stream failed: ${response.status}`);

@@ -175,3 +175,36 @@ test.describe("S3c refused WACC copy", () => {
     await expect(page.getByTestId("wacc-refused")).toContainText("risk-free rate");
   });
 });
+
+// Plan 2026-11-16 S3d: the calculation detail and the DCF refusal name the missing assumption.
+test.describe("S3d refused assumptions named in detail and DCF", () => {
+  test("en: the WACC calculation detail opens with the refusal line naming the risk-free rate", async ({ page }) => {
+    await goto(page, refusalPatch);
+    await page.getByTestId("assumption-table").getByRole("button", { name: "WACC detail" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByTestId("wacc-refused")).toContainText("risk-free rate");
+  });
+
+  test.describe("ko-KR", () => {
+    test.use({ locale: "ko-KR" });
+    test("ko: the WACC calculation detail opens with the refusal line naming 무위험수익률", async ({ page }) => {
+      await mockCorporatePageApi(page, undefined, { aaplMetricsPatch: refusalPatch });
+      await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("heading", { name: "기업 분석" })).toBeVisible({ timeout: 60_000 });
+      await page.getByTestId("assumption-table").getByRole("button", { name: "WACC 상세" }).click();
+      await expect(page.getByRole("dialog").getByTestId("wacc-refused")).toContainText("무위험수익률");
+    });
+  });
+
+  test("en: the DCF refusal names only the input the route reports missing", async ({ page }) => {
+    await mockCorporatePageApi(page, undefined, { aaplMetricsPatch: refusalPatch });
+    const onlyErp = { status: "unavailable", reason: "assumptions_missing", wacc_refusal: { code: "assumptions_missing", missing: ["equity_risk_premium"] } };
+    await page.route("**/api/v1/corporate/dcf/AAPL/stream", (route) => route.fulfill({
+      status: 200, contentType: "application/json", body: JSON.stringify(onlyErp),
+    }));
+    await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
+    await page.getByRole("button", { name: "Refresh DCF" }).click();
+    await expect(page.getByTestId("corporate-verdict").getByTestId("dcf-refusal")).toContainText("Missing: equity risk premium");
+  });
+});
