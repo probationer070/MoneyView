@@ -87,6 +87,23 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Volatility | 변동성 | label (portfolio table header) |
 | Weight | 비중 | label (portfolio table header) |
 | Action | 관리 | label (portfolio table header) |
+| Company | 기업명 | label (comparison table header) |
+| Report ID | 보고서 ID | label (batch DCF report table header) |
+| Fair Value | 적정가치 | label (batch DCF report table header; the Gap to fair value row uses the same term) |
+| Terminal g | 영구성장률 | label (DCF sensitivity corner, WACC \ Terminal g) |
+| Projected FCFF | 예상 잉여현금흐름 | label (raw data table header; FCFF stays 잉여현금흐름) |
+| Discount Factor | 할인계수 | label (raw data table header) |
+| Present Value | 현재가치 | label (raw data table header; 현재가 stays Current Price) |
+| Breakdown | 구성 | label (raw data table header) |
+| Context | 맥락 | label (raw data table header) |
+| Dataset | 데이터셋 | label (raw data table header) |
+| Field | 항목 | label (raw data table header; Item stays 항목) |
+| Statement | 재무제표 | label (raw data table header) |
+| Quarter | 분기 | label (raw data table header) |
+| Metric | 지표 | label (raw data table header) |
+| Open | 시가 | label (raw price table header) |
+| Close | 종가 | label (raw price table header) |
+| Volume | 거래량 | label (raw price table header) |
 | ROIC - WACC | 투하자본이익률 - WACC | label (table header; ROIC expanded as in the ROIC row, Korean half needs Hangul) |
 | Allocation | 배분 | label (allocation table header) |
 | Adjust | 조정 | label (allocation table header) |

@@ -2,6 +2,7 @@
 
 import type { DcfFullReport } from "../../../../../../packages/shared-types";
 import { ActionButton } from "@/components/ui/ActionButton";
+import { BilingualLabel } from "@/components/ui/BilingualLabel";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { useT } from "@/lib/i18n/locale";
@@ -81,10 +82,10 @@ export function RawDataTab(props: RawDataTabProps) {
                   <table className={TABLE}>
                     <thead className={THEAD}>
                       <tr>
-                        <th className="px-3 py-2">Year</th>
-                        <th className="px-3 py-2">Projected FCFF</th>
-                        <th className="px-3 py-2">Discount Factor</th>
-                        <th className="px-3 py-2">Present Value</th>
+                        <th className="px-3 py-2"><BilingualLabel k="year" /></th>
+                        <th className="px-3 py-2"><BilingualLabel k="projectedFcff" /></th>
+                        <th className="px-3 py-2"><BilingualLabel k="discountFactor" /></th>
+                        <th className="px-3 py-2"><BilingualLabel k="presentValue" /></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -103,9 +104,9 @@ export function RawDataTab(props: RawDataTabProps) {
                   <table className={TABLE}>
                     <thead className={THEAD}>
                       <tr>
-                        <th className="px-3 py-2">Breakdown</th>
-                        <th className="px-3 py-2">Value</th>
-                        <th className="px-3 py-2">Context</th>
+                        <th className="px-3 py-2"><BilingualLabel k="breakdown" /></th>
+                        <th className="px-3 py-2"><BilingualLabel k="value" /></th>
+                        <th className="px-3 py-2"><BilingualLabel k="context" /></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -155,10 +156,10 @@ export function RawDataTab(props: RawDataTabProps) {
             <table className="w-full min-w-[52rem] table-fixed text-left">
               <thead className={`sticky top-0 ${THEAD}`}>
                 <tr>
-                  <th className="px-3 py-2">Dataset</th>
-                  <th className="px-3 py-2">Field</th>
-                  <th className="px-3 py-2">Value</th>
-                  <th className="px-3 py-2">Source</th>
+                  <th className="px-3 py-2"><BilingualLabel k="dataset" /></th>
+                  <th className="px-3 py-2"><BilingualLabel k="field" /></th>
+                  <th className="px-3 py-2"><BilingualLabel k="value" /></th>
+                  <th className="px-3 py-2"><BilingualLabel k="source" /></th>
                 </tr>
               </thead>
               <tbody>
@@ -193,12 +194,12 @@ export function RawDataTab(props: RawDataTabProps) {
             <table className="w-full min-w-[48rem] table-fixed text-left">
               <thead className={`sticky top-0 ${THEAD}`}>
                 <tr>
-                  <th className="px-3 py-2">Date</th>
-                  <th className="px-3 py-2">Open</th>
-                  <th className="px-3 py-2">High</th>
-                  <th className="px-3 py-2">Low</th>
-                  <th className="px-3 py-2">Close</th>
-                  <th className="px-3 py-2">Volume</th>
+                  <th className="px-3 py-2"><BilingualLabel k="date" /></th>
+                  <th className="px-3 py-2"><BilingualLabel k="open" /></th>
+                  <th className="px-3 py-2"><BilingualLabel k="high" /></th>
+                  <th className="px-3 py-2"><BilingualLabel k="low" /></th>
+                  <th className="px-3 py-2"><BilingualLabel k="close" /></th>
+                  <th className="px-3 py-2"><BilingualLabel k="volume" /></th>
                 </tr>
               </thead>
               <tbody>
@@ -235,10 +236,10 @@ export function RawDataTab(props: RawDataTabProps) {
             <table className="w-full min-w-[56rem] table-fixed text-left">
               <thead className={`sticky top-0 ${THEAD}`}>
                 <tr>
-                  <th className="px-3 py-2">Statement</th>
-                  <th className="px-3 py-2">Quarter</th>
-                  <th className="px-3 py-2">Metric</th>
-                  <th className="px-3 py-2">Value</th>
+                  <th className="px-3 py-2"><BilingualLabel k="statement" /></th>
+                  <th className="px-3 py-2"><BilingualLabel k="quarter" /></th>
+                  <th className="px-3 py-2"><BilingualLabel k="metric" /></th>
+                  <th className="px-3 py-2"><BilingualLabel k="value" /></th>
                 </tr>
               </thead>
               <tbody>

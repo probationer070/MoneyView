@@ -5,6 +5,7 @@ import type { BenchmarkPreset } from "@/lib/benchmarkPresets";
 import { bridgedEstimatedValue, bridgedUpsidePct, UNBRIDGED_PLACEHOLDER, UNBRIDGED_REASON } from "@/lib/bridgeQuality";
 import { Bar, BarChart, CartesianGrid, Cell, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { BilingualLabel } from "@/components/ui/BilingualLabel";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -431,12 +432,12 @@ export function TargetStockComparisonSection({
                   <table className="type-small w-full">
                     <thead className="bg-[var(--surface)] text-left text-[var(--ink-muted)]">
                       <tr>
-                        <th className="type-caption px-4 py-3">Ticker</th>
-                        <th className="type-caption px-4 py-3">Report ID</th>
-                        <th className="type-caption px-4 py-3 text-right">Fair Value</th>
-                        <th className="type-caption px-4 py-3 text-right">Current Price</th>
-                        <th className="type-caption px-4 py-3 text-right">Upside</th>
-                        <th className="type-caption px-4 py-3">Status</th>
+                        <th className="type-caption px-4 py-3"><BilingualLabel k="ticker" /></th>
+                        <th className="type-caption px-4 py-3"><BilingualLabel k="reportId" /></th>
+                        <th className="type-caption px-4 py-3 text-right"><BilingualLabel k="fairValue" /></th>
+                        <th className="type-caption px-4 py-3 text-right"><BilingualLabel k="currentPrice" /></th>
+                        <th className="type-caption px-4 py-3 text-right"><BilingualLabel k="upside" /></th>
+                        <th className="type-caption px-4 py-3"><BilingualLabel k="status" /></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--grid)]">

@@ -4,6 +4,7 @@ import type { CalculationDetailKey } from "./calculationDetailTypes";
 import { bridgedDcfValue } from "../corporateDerivedViews";
 import { impliedReturnRefusalText } from "@/lib/impliedReturn";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { BilingualLabel } from "@/components/ui/BilingualLabel";
 import { useT } from "@/lib/i18n/locale";
 import { COLUMNS_WITH_HELP } from "./CorporateGuide";
 
@@ -50,9 +51,9 @@ export function CorporateComparisonTable({
       <table className="type-small w-full">
         <thead className="sticky top-0 z-10 bg-[var(--surface)] text-left text-[var(--ink-muted)]">
           <tr>
-            <th className="type-caption px-4 py-3">{t("corporate.columns.ticker")}</th>
-            <th className="type-caption px-4 py-3">{t("corporate.columns.company")}</th>
-            <th className="type-caption px-4 py-3">{t("corporate.columns.sector")}</th>
+            <th className="type-caption px-4 py-3"><BilingualLabel k="ticker" /></th>
+            <th className="type-caption px-4 py-3"><BilingualLabel k="company" /></th>
+            <th className="type-caption px-4 py-3"><BilingualLabel k="sector" /></th>
             {/* Each value column carries its definition (spec 2026-11-02-corporate-explainers-plan §3 V10). */}
             {COLUMNS_WITH_HELP.map((key) => (
               <th key={key} data-column={key} className="type-caption px-4 py-3 text-right">

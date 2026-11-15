@@ -2,6 +2,7 @@
 
 import type { DcfSensitivityCell, DcfSensitivityGrid } from "../../../../../packages/shared-types";
 import { UNBRIDGED_PLACEHOLDER, UNBRIDGED_REASON } from "@/lib/bridgeQuality";
+import { BilingualLabel } from "@/components/ui/BilingualLabel";
 
 /** What a cell with no valuation renders as. Distinct in meaning from UNBRIDGED_PLACEHOLDER,
  *  which says the ticker has no equity bridge rather than that the model has no value here. */
@@ -58,7 +59,7 @@ export function DcfSensitivityTable({
         <table className="type-small w-full min-w-[42rem] table-fixed text-left">
           <thead className="type-caption uppercase bg-[var(--brand)] text-[var(--on-brand)]">
             <tr>
-              <th className="px-3 py-2">WACC \ Terminal g</th>
+              <th className="px-3 py-2"><BilingualLabel k="wacc" /> \ <BilingualLabel k="terminalGrowth" /></th>
               {sensitivity.terminal_growth_values.map((growth) => (
                 <th key={`sensitivity-growth-${growth}`} className="px-3 py-2 tabular-nums">
                   {formatPct(growth * 100)}

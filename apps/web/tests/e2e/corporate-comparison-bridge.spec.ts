@@ -14,9 +14,9 @@ function xp(value: string) {
 // via XPath's `preceding-sibling` count, so this stays a plain Locator -- chainable and
 // awaitable exactly like `page.getByRole(...)` -- rather than a Promise.
 function rowCell(page: Page, ticker: string, columnHeader: string) {
-  const table = `//table[.//thead//th[normalize-space(.)=${xp(columnHeader)}]]`;
+  const table = `//table[.//thead//th[normalize-space(.//span[@lang="en"])=${xp(columnHeader)} or normalize-space(.)=${xp(columnHeader)}]]`;
   const row = `${table}//tbody/tr[.//td[normalize-space(.)=${xp(ticker)}]]`;
-  const columnPosition = `count(${table}//thead//th[normalize-space(.)=${xp(columnHeader)}]/preceding-sibling::th)+1`;
+  const columnPosition = `count(${table}//thead//th[normalize-space(.//span[@lang="en"])=${xp(columnHeader)} or normalize-space(.)=${xp(columnHeader)}]/preceding-sibling::th)+1`;
   return page.locator(`xpath=${row}/td[position()=${columnPosition}]`);
 }
 

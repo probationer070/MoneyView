@@ -45,9 +45,9 @@ async function loadBulkReports(page: Page) {
 // silently point this at the wrong number.
 function bulkCell(page: Page, ticker: string, columnHeader: string) {
   const q = (value: string) => `"${value}"`;
-  const table = `//table[.//thead//th[normalize-space(.)=${q("Fair Value")}]]`;
+  const table = `//table[.//thead//th[normalize-space(.//span[@lang="en"])=${q("Fair Value")} or normalize-space(.)=${q("Fair Value")}]]`;
   const row = `${table}//tbody/tr[.//td[normalize-space(.)=${q(ticker)}]]`;
-  const position = `count(${table}//thead//th[normalize-space(.)=${q(columnHeader)}]/preceding-sibling::th)+1`;
+  const position = `count(${table}//thead//th[normalize-space(.//span[@lang="en"])=${q(columnHeader)} or normalize-space(.)=${q(columnHeader)}]/preceding-sibling::th)+1`;
   return page.locator(`xpath=${row}/td[position()=${position}]`);
 }
 
