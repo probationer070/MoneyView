@@ -263,7 +263,7 @@ export const ko: Messages = {
       no_segments: "가치를 계산할 사업 세그먼트가 없습니다.",
       non_positive_target_capital: "목표 연도의 투하자본이 0 이하여서 한계수익률을 가중할 수 없습니다.",
       rate_schedule_length_mismatch: "연도별 세율 목록의 길이가 예측 연도 수와 맞지 않습니다.",
-      assumptions_missing: "무위험수익률 또는 주식위험프리미엄이 없어 가치를 산정하지 않았습니다. 시장 가정에서 입력하세요.",
+      assumptions_missing: "무위험수익률 또는 주식위험프리미엄이 없어 가치를 산정하지 않았습니다. 시장 가정에서 입력하십시오.",
       wacc_not_above_growth: "할인율이 성장률을 넘지 않아 고든 성장 모형의 가치를 계산할 수 없습니다.",
       non_positive_shares: "희석 주식 수가 0 이하여서 주당 가치를 구할 수 없습니다.",
       conflicting_share_inputs: "공모가가 이미 신주 수를 정하므로 신주 수와 공모가는 함께 입력할 수 없습니다.",
@@ -964,7 +964,8 @@ export const ko: Messages = {
       fixed: "고정", auditUncertain: "감사 불확실",
       missing: {
         title: "WACC를 계산할 수 없음",
-        reason: "무위험수익률 또는 주식위험프리미엄이 없습니다 ({missing}). 시장 가정에서 입력하세요.",
+        reason: "무위험수익률 또는 주식위험프리미엄이 없습니다 ({missing}). 시장 가정에서 입력하십시오.",
+        label: { risk_free_rate: "무위험수익률", risk_free: "무위험수익률", equity_risk_premium: "주식위험프리미엄", erp: "주식위험프리미엄", crp: "국가위험프리미엄" },
       },
       stale: { risk_free: "무위험수익률이 기준일을 초과했습니다", erp: "ERP가 120일을 초과했습니다" },
       source: { caption: "무위험수익률: {rfSource}, {rfAsOf} · ERP: {erpSource}, {erpAsOf}" },

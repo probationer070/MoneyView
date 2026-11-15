@@ -16,6 +16,7 @@ import { fieldInputClass } from "@/components/ui/InlineField";
 import { MISSING } from "@/lib/format";
 import { useT } from "@/lib/i18n/locale";
 import { CorporateComparisonTable } from "./CorporateComparisonTable";
+import { readableMissing } from "./AssumptionSourceCaption";
 import type { CalculationDetailKey } from "./calculationDetailTypes";
 import type { ComparisonSortKey } from "../corporateTypes";
 
@@ -305,7 +306,7 @@ export function TargetStockComparisonSection({
       {comparisonIsError ? <ErrorState title={t("corporate.comparison.errorTitle")} message={t("corporate.comparison.errorBody")} /> : null}
       {comparisonRefusalMissing ? (
         <p data-testid="comparison-refused" className="type-body text-[var(--ink-secondary)]">
-          {t("corporate.assumptions.missing.reason", { missing: comparisonRefusalMissing.join(", ") })}
+          {t("corporate.assumptions.missing.reason", { missing: readableMissing(comparisonRefusalMissing, t) })}
         </p>
       ) : null}
       {!comparisonData && !comparisonRefusalMissing && !comparisonIsFetching && !comparisonIsError ? (

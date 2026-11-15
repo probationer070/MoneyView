@@ -29,13 +29,22 @@ export function AssumptionSourceCaption({ assumptions, compact = false }: { assu
   );
 }
 
+/** The server's missing keys as reader words, joined; an unmapped key is shown as the server sent it. */
+export function readableMissing(missing: string[], t: ReturnType<typeof useT>): string {
+  return missing.map((key) => {
+    const id = `corporate.assumptions.missing.label.${key}` as Parameters<ReturnType<typeof useT>>[0];
+    const label = t(id);
+    return label === id ? key : label;
+  }).join(", ");
+}
+
 /** The refused WACC: title and reason, no number. */
 export function WaccRefusedNote({ missing }: { missing: string[] }) {
   const t = useT();
   return (
     <div data-testid="wacc-refused" className="flex flex-col gap-1">
       <span className="type-label text-[var(--ink)]">{t("corporate.assumptions.missing.title")}</span>
-      <span className="type-small text-[var(--ink-muted)]">{t("corporate.assumptions.missing.reason", { missing: missing.join(", ") })}</span>
+      <span className="type-small text-[var(--ink-muted)]">{t("corporate.assumptions.missing.reason", { missing: readableMissing(missing, t) })}</span>
     </div>
   );
 }

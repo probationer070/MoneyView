@@ -26,7 +26,7 @@ interface KpiRowProps {
 export function KpiRow({ spread, bottomUpKe, wacc, leveredBeta, refusedMissing, assumptionsEcho, onOpenDetail }: KpiRowProps) {
   const t = useT();
   const tiles: { key: CalculationDetailKey; label: string; value: string; caption: string }[] = [
-    { key: "spread", label: t("corporate.kpi.spread"), value: pct(spread), caption: t(spread >= 0 ? "corporate.kpi.spreadUp" : "corporate.kpi.spreadDown") },
+    { key: "spread", label: t("corporate.kpi.spread"), value: pct(spread), caption: Number.isFinite(spread) ? t(spread >= 0 ? "corporate.kpi.spreadUp" : "corporate.kpi.spreadDown") : "" },
     refusedMissing
       ? { key: "bottomUpKe", label: t("corporate.kpi.ke"), value: MISSING, caption: t("corporate.assumptions.missing.title") }
       : { key: "bottomUpKe", label: t("corporate.kpi.ke"), value: pct(bottomUpKe), caption: t("corporate.kpi.keCaption") },

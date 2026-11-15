@@ -35,7 +35,7 @@ export const initialAssumptions: CorporateAssumptions = {
   wacc: 10,
   debtRatio: 18,
   unleveredBeta: 1.05,
-  crp: 1.1,
+  crp: Number.NaN,
   reinvestment: 34,
   fcff: 92,
   innovation: 82,

@@ -10,6 +10,7 @@ import { Eyebrow } from "@/components/ui/Eyebrow";
 import { fieldInputClass } from "@/components/ui/InlineField";
 import { MetricQualityBadge } from "@/components/ui/MetricQualityBadge";
 import { useT } from "@/lib/i18n/locale";
+import { MISSING } from "@/lib/format";
 import { ASSUMPTION_ROWS, formatAssumption, type AssumptionField, type AssumptionKey, type AssumptionRowDef } from "../assumptionRows";
 import type { CorporateAssumptions, RoicBasis } from "../corporateTypes";
 import { dateTimeText, pct } from "../corporateUtils";
@@ -86,12 +87,14 @@ export function AssumptionTable(props: AssumptionTableProps) {
   // The value shown is the assumption the DCF uses; a weak audit is marked by the badge, never by N/A.
   const display = (row: AssumptionRowDef) => {
     if (row.field === null) return pct(assumptions.crp);
+    if (row.key === "wacc" && !Number.isFinite(assumptions.wacc)) return MISSING;
     return formatAssumption(row, assumptions[row.field]);
   };
   const quality = (row: AssumptionRowDef): MetricQuality | null => {
     if (row.key === "growth") return growthMeta?.quality ?? null;
     if (row.key === "roic") return roicAudit?.quality ?? roicMeta?.quality ?? null;
-    if (row.key === "wacc") return waccAudit?.quality ?? null;
+    // A refused WACC (no number) is "missing", never the audit's estimate.
+    if (row.key === "wacc") return Number.isFinite(assumptions.wacc) ? waccAudit?.quality ?? null : "missing";
     return null;
   };
   // The badge's title says the audit behind the value is uncertain (invalid, missing or estimated).

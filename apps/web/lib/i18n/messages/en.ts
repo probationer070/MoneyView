@@ -962,6 +962,7 @@ export const en = {
       missing: {
         title: "WACC unavailable",
         reason: "No risk-free rate or equity risk premium is on file ({missing}). Enter one under Market assumptions.",
+        label: { risk_free_rate: "risk-free rate", risk_free: "risk-free rate", equity_risk_premium: "equity risk premium", erp: "equity risk premium", crp: "country risk premium" },
       },
       stale: { risk_free: "Risk-free rate is older than the limit", erp: "ERP is older than 120 days" },
       source: { caption: "Risk-free: {rfSource}, {rfAsOf} · ERP: {erpSource}, {erpAsOf}" },

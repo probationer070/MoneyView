@@ -93,7 +93,7 @@ test("a refused WACC shows the reason and no number on the WACC tile and the Ke 
   await goto(page, refusalPatch);
   const refused = page.getByTestId("wacc-refused");
   await expect(refused).toContainText("WACC unavailable");
-  await expect(refused).toContainText("risk_free_rate, equity_risk_premium");
+  await expect(refused).toContainText("risk-free rate, equity risk premium");
   await expect(refused).not.toContainText(/\d+(\.\d+)?%/);
   // Neither the seed WACC (10.0%) nor the slider value stands in for it.
   await expect(page.getByTestId("corporate-kpis")).not.toContainText("10.0%");
@@ -110,7 +110,7 @@ test.describe("ko-KR", () => {
     await page.goto("/corporate", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: "기업 분석" })).toBeVisible({ timeout: 60_000 });
     await expect(page.getByTestId("wacc-refused")).toContainText("WACC를 계산할 수 없음");
-    await expect(page.getByTestId("wacc-refused")).toContainText("시장 가정에서 입력하세요");
+    await expect(page.getByTestId("wacc-refused")).toContainText("시장 가정에서 입력하십시오");
   });
 });
 
@@ -137,4 +137,41 @@ test("the comparison table shows the reason instead of rows when assumptions are
   await openLowerTab(page, "Target Stock Comparison");
   await page.getByRole("button", { name: "Refresh comparison" }).click();
   await expect(page.getByTestId("comparison-refused")).toContainText("No risk-free rate or equity risk premium is on file", { timeout: 30_000 });
+});
+
+// Plan 2026-11-16 S3c: a refused WACC shows a dash, a readable reason and a formal Korean register.
+test.describe("S3c refused WACC copy", () => {
+  test.describe("ko-KR", () => {
+    test.use({ locale: "ko-KR" });
+    test("ko: the WACC row shows a dash, not NaN", async ({ page }) => {
+      await mockCorporatePageApi(page, undefined, { aaplMetricsPatch: refusalPatch });
+      await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("heading", { name: "기업 분석" })).toBeVisible({ timeout: 60_000 });
+      const row = page.getByTestId("assumption-row-wacc");
+      await expect(row).not.toContainText("NaN");
+      await expect(row.locator("td").first()).toHaveText("—");
+    });
+
+    test("ko: the ROIC - WACC tile does not judge value when the spread is refused", async ({ page }) => {
+      await mockCorporatePageApi(page, undefined, { aaplMetricsPatch: refusalPatch });
+      await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("heading", { name: "기업 분석" })).toBeVisible({ timeout: 60_000 });
+      await expect(page.getByTestId("corporate-kpis")).not.toContainText("가치 훼손");
+    });
+
+    test("ko: the refusal reads with the formal ending and the readable label", async ({ page }) => {
+      await mockCorporatePageApi(page, undefined, { aaplMetricsPatch: refusalPatch });
+      await page.goto("/corporate", { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("heading", { name: "기업 분석" })).toBeVisible({ timeout: 60_000 });
+      const refused = page.getByTestId("wacc-refused");
+      await expect(refused).toContainText("무위험수익률");
+      await expect(refused).not.toContainText("risk_free");
+      await expect(refused.locator("span.type-small")).toHaveText(/십시오\.$/);
+    });
+  });
+
+  test("en: the refusal names the risk-free rate in words", async ({ page }) => {
+    await goto(page, refusalPatch);
+    await expect(page.getByTestId("wacc-refused")).toContainText("risk-free rate");
+  });
 });
