@@ -1,10 +1,13 @@
 "use client";
 
 import { formatNumber } from "@/lib/format";
+import { useT } from "@/lib/i18n/locale";
 import clsx from "clsx";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
 import { TileSparkline } from "./TileSparkline";
 import type { NewsArticle, PortfolioStock } from "../page";
+
+type Translate = ReturnType<typeof useT>;
 
 function relativeAge(published: string): string {
   if (!published) return "";
@@ -26,16 +29,16 @@ function formatClose(lastClose: number | null): string {
 
 // The button's accessible name is its action, not its contents: ticker, price and delta
 // only. A missing price or delta is omitted outright rather than voiced as 0.
-function tileLabel(stock: PortfolioStock): string {
+function tileLabel(stock: PortfolioStock, t: Translate): string {
   const parts: string[] = [stock.ticker];
   if (Number.isFinite(stock.last_close)) {
     parts.push(formatClose(stock.last_close));
   }
   const deltaPct = stock.delta?.delta_pct;
   if (typeof deltaPct === "number" && Number.isFinite(deltaPct)) {
-    parts.push(`${deltaPct < 0 ? "down" : "up"} ${formatNumber(Math.abs(deltaPct) / 100, "percent", { digits: 1 })}`);
+    parts.push(`${deltaPct < 0 ? t("portfolio.tile.down") : t("portfolio.tile.up")} ${formatNumber(Math.abs(deltaPct) / 100, "percent", { digits: 1 })}`);
   }
-  return `Open details for ${parts.join(", ")}`;
+  return t("portfolio.tile.openDetails", { parts: parts.join(", ") });
 }
 
 // The three news states are distinct claims and only two of them are about the data.
@@ -44,11 +47,11 @@ function tileLabel(stock: PortfolioStock): string {
 // keyed on the debounced search and a ticker revealed by the newest keystroke is not in
 // the current response. Collapsing the second into the first would state "never checked"
 // about a ticker that may well have been checked a minute ago.
-function emptyNewsSummary(lastCheckedAt: string | null | undefined): string {
-  if (lastCheckedAt === undefined) return "News not loaded yet";
-  if (lastCheckedAt === null) return "Never checked for news";
+function emptyNewsSummary(lastCheckedAt: string | null | undefined, t: Translate): string {
+  if (lastCheckedAt === undefined) return t("portfolio.tile.newsNotLoaded");
+  if (lastCheckedAt === null) return t("portfolio.tile.newsNever");
   const at = new Date(lastCheckedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  return `No recent news · last checked ${at}`;
+  return t("portfolio.tile.newsNone", { time: at });
 }
 
 interface StockTileProps {
@@ -67,6 +70,7 @@ export function StockTile({ stock, news, lastCheckedAt, followed, onToggleFollow
   // the headlines -- the thing this tile exists to show -- are not in the name. They are
   // attached as the button's DESCRIPTION instead, which assistive tech announces after the
   // name rather than in place of it.
+  const t = useT();
   const newsId = `stock-tile-news-${stock.ticker}`;
   return (
     // The follow control is a SIBLING of the tile button, not a child: the tile is itself
@@ -79,7 +83,7 @@ export function StockTile({ stock, news, lastCheckedAt, followed, onToggleFollow
     <button
       type="button"
       onClick={() => onOpen(stock)}
-      aria-label={tileLabel(stock)}
+      aria-label={tileLabel(stock, t)}
       aria-describedby={newsId}
       data-testid={`stock-tile-${stock.ticker}`}
       // `w-full` because a <button> is fit-content sized: without it the card was only as
@@ -111,7 +115,7 @@ export function StockTile({ stock, news, lastCheckedAt, followed, onToggleFollow
               rendering it raw published 0.25 as "wt 0.3%" rather than "wt 25.0%". */}
           {stock.weight > 0 ? (
             <span className="shrink-0 type-mono text-[var(--ink-muted)]">
-              wt {formatNumber(stock.weight, "percent", { digits: 1 })}
+              {t("portfolio.tile.wt")} {formatNumber(stock.weight, "percent", { digits: 1 })}
             </span>
           ) : null}
         </span>
@@ -120,7 +124,7 @@ export function StockTile({ stock, news, lastCheckedAt, followed, onToggleFollow
       <span id={newsId} className="block border-t border-[var(--line)] p-3">
         {news.length === 0 ? (
           <span className="block type-small text-[var(--ink-muted)]">
-            {emptyNewsSummary(lastCheckedAt)}
+            {emptyNewsSummary(lastCheckedAt, t)}
           </span>
         ) : (
           <span className="flex flex-col gap-1.5">
@@ -138,8 +142,8 @@ export function StockTile({ stock, news, lastCheckedAt, followed, onToggleFollow
         type="button"
         onClick={() => onToggleFollow(stock)}
         aria-pressed={followed}
-        aria-label={followed ? `Unfollow ${stock.ticker}` : `Follow ${stock.ticker}`}
-        title={followed ? "Followed — click to remove" : "Follow this stock"}
+        aria-label={followed ? t("portfolio.tile.unfollow", { ticker: stock.ticker }) : t("portfolio.tile.follow", { ticker: stock.ticker })}
+        title={followed ? t("portfolio.tile.followedTitle") : t("portfolio.tile.followTitle")}
         data-testid={`stock-tile-follow-${stock.ticker}`}
         className={clsx(
           "absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-[var(--radius-1)]",

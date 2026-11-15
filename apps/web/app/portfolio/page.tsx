@@ -1731,7 +1731,7 @@ export default function PortfolioPage() {
 
   const handleRefreshPortfolioAnalysis = () => {
     if (!hasHoldings) {
-      setPortfolioAnalysisMessage("Add holdings before refreshing portfolio analysis.");
+      setPortfolioAnalysisMessage(t("portfolio.analysis.addHoldingsFirst"));
       return;
     }
 
@@ -1772,8 +1772,8 @@ export default function PortfolioPage() {
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <label className="flex flex-col gap-1 type-small text-[var(--ink-muted)]">
                   <InfoTooltip
-                    label="Holding Start Date"
-                    description="Sets the starting point for return, attribution, and beta calculations. Use the date the stock was added or the position was first held; this prevents multi-year winners from showing inflated returns when the actual holding period is shorter."
+                    label={t("portfolio.period.startLabel")}
+                    description={t("portfolio.period.startHelp")}
                   />
                   <input
                     type="date"
@@ -1785,8 +1785,8 @@ export default function PortfolioPage() {
                 </label>
                 <label className="flex flex-col gap-1 type-small text-[var(--ink-muted)]">
                   <InfoTooltip
-                    label="Return End Date"
-                    description="Sets the ending date for return, attribution, and beta calculations. Leave blank to use the latest available cached market date."
+                    label={t("portfolio.period.endLabel")}
+                    description={t("portfolio.period.endHelp")}
                   />
                   <input
                     type="date"
@@ -1851,7 +1851,7 @@ export default function PortfolioPage() {
             className="inline-flex items-center justify-center gap-2 rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 type-small text-[var(--ink)] hover:border-[var(--brand)]"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${portfolioComparisonCalculating ? "animate-spin" : ""}`} />
-            Refresh Analysis
+            {t("portfolio.analysis.refresh")}
           </button>
         </div>
         {portfolioAnalysisMessage && <span className="type-small text-[var(--ink-muted)]">{portfolioAnalysisMessage}</span>}
@@ -1891,8 +1891,8 @@ export default function PortfolioPage() {
 
       {attributionView.showIdle && (
         <StatusPanel
-          title="Attribution Idle"
-          message="Attribution stays idle on first load. Click Refresh Analysis when you want current portfolio attribution."
+          title={t("portfolio.analysis.idleTitle")}
+          message={t("portfolio.analysis.idleMessage")}
         />
       )}
 

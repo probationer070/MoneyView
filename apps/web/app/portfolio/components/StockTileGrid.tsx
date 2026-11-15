@@ -2,10 +2,13 @@
 
 import { useMemo, type ReactNode } from "react";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { useT } from "@/lib/i18n/locale";
 import { StockTile } from "./StockTile";
 import type { NewsArticle, PortfolioStock } from "../page";
 
 export const ALL_GROUPS = "all";
+
+type Translate = ReturnType<typeof useT>;
 
 /** A watchlist group name, or `all` for every stock regardless of group. */
 export type GridFilter = string;
@@ -57,9 +60,9 @@ export function resolveGroupFilter(stocks: PortfolioStock[], filter: GridFilter)
  * follow/unfollow round-trip depends on. The label was the defect, so the label is what
  * changed.
  */
-export function groupLabel(group: string, followedGroup: string, unfollowedGroup: string): string {
-  if (group === followedGroup) return "Followed";
-  if (group === unfollowedGroup) return "Not followed";
+export function groupLabel(group: string, followedGroup: string, unfollowedGroup: string, t: Translate): string {
+  if (group === followedGroup) return t("portfolio.grid.followed");
+  if (group === unfollowedGroup) return t("portfolio.grid.unfollowed");
   return group.replace(/_/g, " ");
 }
 
@@ -128,6 +131,7 @@ export function StockTileGrid({
   stocks, newsByTicker, filter, onFilterChange, search, onSearchChange, onOpenStock,
   followedGroup, unfollowedGroup, onToggleFollow, statusSlot, renderTable, onAddStock, addStockLabel,
 }: StockTileGridProps) {
+  const t = useT();
   const groups = useMemo(() => availableGroups(stocks), [stocks]);
 
   const effectiveFilter = useMemo(() => resolveFromGroups(groups, filter), [groups, filter]);
@@ -152,22 +156,22 @@ export function StockTileGrid({
           <select
             value={effectiveFilter}
             onChange={(event) => onFilterChange(event.target.value as GridFilter)}
-            aria-label="Grid filter"
+            aria-label={t("portfolio.grid.filter")}
             data-testid="grid-filter"
             className="rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-2 py-1 type-body"
           >
             {groups.map((group) => (
               <option key={group} value={group}>
-                {groupLabel(group, followedGroup, unfollowedGroup)}
+                {groupLabel(group, followedGroup, unfollowedGroup, t)}
               </option>
             ))}
-            <option value={ALL_GROUPS}>All</option>
+            <option value={ALL_GROUPS}>{t("portfolio.grid.all")}</option>
           </select>
           <input
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Search ticker or name"
-            aria-label="Search stocks"
+            placeholder={t("portfolio.grid.searchPlaceholder")}
+            aria-label={t("portfolio.grid.search")}
             data-testid="grid-search"
             className="min-w-[12rem] flex-1 rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-2 py-1 type-body"
           />
@@ -179,7 +183,7 @@ export function StockTileGrid({
           data-testid="grid-count"
           className="type-small text-[var(--ink-muted)]"
         >
-          {`${visible.length} of ${stocks.length} · ${followedCount} followed`}
+          {t("portfolio.grid.count", { shown: visible.length, total: stocks.length, followed: followedCount })}
         </span>
         {statusSlot}
       </div>
@@ -187,8 +191,8 @@ export function StockTileGrid({
       {visible.length === 0 ? (
         <>
         <EmptyState
-          title={stocks.length === 0 ? "No Holdings Yet" : "No stocks in this group"}
-          description="Follow a stock with the + on its tile in All, or switch the filter to All."
+          title={stocks.length === 0 ? t("portfolio.grid.noHoldings") : t("portfolio.grid.noneInGroup")}
+          description={t("portfolio.grid.emptyHint")}
         />
         {onAddStock ? (
           <button
