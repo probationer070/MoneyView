@@ -162,6 +162,21 @@ export const ko: Messages = {
         body: "헤드라인은 종목별 구글 뉴스 검색 결과이며 로컬 데이터베이스에 저장됩니다. 새로고침 아이콘은 화면에 보이는 종목의 뉴스를 다시 수집합니다. 불러오지 못하면 기사가 없는 것이 아니라 가져오지 못한 것이라고 알려 줍니다.",
       },
     },
+    detail: {
+      quickReview: { title: "빠른 포트폴리오 검토", body: "여기서 포트폴리오 작업을 계속하거나, 전체 상세 경로를 열어 종목을 단독으로 분석할 수 있습니다.", viewFull: "전체 상세 보기" },
+      sector: { label: "섹터", aria: "종목 섹터", save: "섹터 저장", saving: "섹터 저장 중...", upToDate: "섹터가 이미 최신 상태입니다.", saved: "{ticker} 섹터를 저장했습니다.", failed: "섹터를 저장하지 못했습니다." },
+      theme: { label: "테마", aria: "종목 테마", none: "테마 없음", other: "기타", save: "테마 저장", saving: "테마 저장 중...", upToDate: "테마가 이미 최신 상태입니다.", saved: "{ticker} 테마를 저장했습니다.", failed: "테마를 저장하지 못했습니다." },
+      stat: { price: "현재가", dayDelta: "일간 변동", sector: "섹터", weight: "비중", unassigned: "미지정" },
+      action: { addToPortfolio: "포트폴리오에 추가", reviewWeight: "포트폴리오 비중 검토", removeFromWatchlist: "관심종목에서 제거" },
+      chart: { title: "OHLC 캔들스틱 + 거래량", description: "캔들은 선택한 기간별 시가, 고가, 저가, 종가를 나타냅니다. 거래량 막대는 거래 활동을 보여줍니다. 이동평균은 5, 20, 60, 120개 기간의 종가로 계산하며, 선택한 주기에 따라 일봉 또는 월봉 기준으로 다시 계산합니다.", daily: "일간", monthly: "월간", ma: "{window}일 이동평균", maMonthly: "{window}개월 이동평균", noHistory: "이 종목의 OHLC 이력은 아직 없습니다.", unavailable: "종목 상세를 불러올 수 없음", unavailableFallback: "이 종목의 OHLC 이력과 관련 상세 데이터를 불러오지 못했습니다.", noPriceData: "가격 데이터 없음" },
+      news: { title: "종목 뉴스 피드 (필터)", description: "Google News RSS에서 수집해 종목별로 로컬에 저장한 종목 전용 최신 헤드라인입니다. 이 영역은 선택한 보유 종목 기준으로 계속 필터링됩니다.", intro: "{ticker} 필터 뉴스를 날짜순으로 보여주며, 오늘 기사는 강조 표시합니다.", loading: "필터 뉴스 불러오는 중...", unavailable: "필터 뉴스를 불러올 수 없음", fallbackError: "{ticker}의 필터 헤드라인을 불러올 수 없습니다.", emptyTitle: "종목 관련 뉴스가 없습니다", emptyBody: "{ticker}에 대해 필터된 헤드라인이 아직 없습니다." },
+      metric: { roicWacc: "투하자본이익률 - WACC", dcf: "DCF 가치 대 현재가 (일회성 괴리)", impliedWacc: "WACC 대비 내재 수익률 (연간 포인트)", marketReturn: "시장 수익률", volatility: "변동성", roicWaccHelp: "양수는 투하자본에 대한 수익률이 현재의 자본비용 추정치를 웃돈다는 뜻입니다.", dcfHelp: "스냅샷 기준으로 현재가 대비 상승 또는 하락 여력입니다.", impliedHelp: "현재 시장 가격이 사업 전체에 대해 내포하는 연간 수익률에서 WACC를 뺀 값이며, 저장된 비교 스냅샷에서 가져옵니다.", volatilityHelp: "빠른 포트폴리오 비교를 위해 최근 로컬 가격 이력으로 추정한 값입니다.", missingRoicWacc: "저장된 스냅샷에 이 종목의 투하자본이익률 - WACC 값이 없습니다.", suspiciousRoicWacc: "저장된 스냅샷의 투하자본이익률 - WACC 값이 정상 범위를 벗어났습니다.", missingDcf: "저장된 스냅샷에 이 종목의 DCF 가치 대 현재가 값이 없습니다.", suspiciousDcf: "저장된 스냅샷의 DCF 가치 대 현재가 값이 정상 범위를 벗어났습니다.", suspiciousImpliedWacc: "저장된 스냅샷의 WACC 대비 내재 수익률 값이 정상 범위를 벗어났습니다." },
+      audit: { loading: "ROIC/WACC 감사 불러오는 중...", unavailable: "지표 감사를 불러올 수 없음", unavailableBody: "{ticker}의 ROIC/WACC 감사 입력값을 불러올 수 없습니다.", roicTitle: "ROIC 감사", waccTitle: "WACC 감사" },
+      flagged: { one: "{ticker} 종목의 지표 값 1개는 현재 이상치 데이터로 분류되어 ", many: "{ticker} 종목의 지표 값 {count}개는 현재 이상치 데이터로 분류되어 ", tail: "로 표시되고 있습니다. 더 최신의 펀더멘털 데이터가 준비될 때까지 가격 차트와 저장된 스냅샷 이력을 우선 검토 맥락으로 참고하시기 바랍니다." },
+      trend: "최근 가격 추세: {value}.",
+      context: { title: "스냅샷 맥락", savedFrom: "{date} 기준 저장된 스냅샷 지표", liveMetrics: "실시간 비교 지표", body: "{label}. 이 모달에 표시된 종목 단위 비교 지표를 검토하는 기준입니다.", asOf: "기준일", source: "출처", universe: "유니버스", benchmark: "벤치마크", version: "버전", liveValue: "실시간" },
+      timeline: { title: "종목 이력 타임라인", intro: "저장된 스냅샷 버전마다 {ticker}의 비교 지표가 어떻게 바뀌었는지 검토합니다.", context: "검토 기준: {date} 스냅샷, {universe}, 벤치마크 {benchmark}.", loading: "종목 이력 타임라인 불러오는 중...", unavailable: "종목 이력을 불러올 수 없음", unavailableBody: "이 종목의 저장된 스냅샷 추세 데이터를 불러올 수 없습니다.", emptyTitle: "저장된 종목 이력이 아직 없습니다", emptyBody: "이 종목의 스냅샷 버전이 생기면 저장된 비교 이력이 여기에 표시됩니다.", group: "저장된 스냅샷 이력", version: "버전 {version}", price: "가격 {price}", against: "{source} 스냅샷, 벤치마크 {benchmark} 대비", savedSnapshots: "저장된 스냅샷", savedSnapshotsBody: "{ticker}에 대해 현재 저장되어 있는 비교 행입니다.", spreadTrend: "WACC 대비 내재 수익률 추세", spreadTrendBody: "가장 최근 값과 가장 오래된 값의 차이이며, 두 스냅샷 모두 이 지표를 기록한 경우에만 계산합니다.", sparkline: "최근 가격 스파크라인", sparklineBody: "저장된 비교 타임라인과 함께 보는 최근 가격 흐름입니다." },
+    },
   },
   valuation: {
     fairValue: {

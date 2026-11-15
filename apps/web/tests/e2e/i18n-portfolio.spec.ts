@@ -85,3 +85,17 @@ test("the weights-over-100% status panel title is Korean", async ({ page }) => {
   await expect(page.getByText("배분 비중이 100%를 초과함", { exact: true })).toBeVisible();
   await expect(page.getByText("Allocation Weights Exceed 100%")).toHaveCount(0);
 });
+
+test("the stock detail modal opened from a tile is Korean", async ({ page }) => {
+  await gotoPortfolioKo(page);
+
+  await page.getByTestId("stock-tile-AAPL").click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading", { name: "빠른 포트폴리오 검토", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "포트폴리오 비중 검토", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "스냅샷 맥락", exact: true })).toBeVisible();
+
+  await expect(dialog.getByText("Quick portfolio review", { exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Review Portfolio Weight", exact: true })).toHaveCount(0);
+  await expect(dialog.getByText("Snapshot Context", { exact: true })).toHaveCount(0);
+});

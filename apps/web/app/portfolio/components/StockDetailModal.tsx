@@ -5,7 +5,7 @@ import React, { useRef, useState, useMemo, useEffect } from "react";
 import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { fetchApi } from "@/lib/api";
-import { useLocale } from "@/lib/i18n/locale";
+import { useLocale, useT } from "@/lib/i18n/locale";
 import { 
   transformToTVCandles, 
   transformToTVVolume, 
@@ -95,6 +95,7 @@ export function StockDetailModal({
   const [savingSector, setSavingSector] = useState(false);
   const [sectorMessage, setSectorMessage] = useState<string | null>(null);
   const { locale } = useLocale();
+  const t = useT();
   const [themeDraft, setThemeDraft] = useState(stock.theme);
   const [savingTheme, setSavingTheme] = useState(false);
   const [themeMessage, setThemeMessage] = useState<string | null>(null);
@@ -214,11 +215,11 @@ export function StockDetailModal({
   const movingAverageSeries = useMemo<TVLineSeries[]>(
     () =>
       MOVING_AVERAGE_WINDOWS.map((windowSize: MovingAverageWindow) => ({
-        title: `${windowSize}${timeframe === "monthly" ? "M" : "D"} MA`,
+        title: timeframe === "monthly" ? t("portfolio.detail.chart.maMonthly", { window: windowSize }) : t("portfolio.detail.chart.ma", { window: windowSize }),
         color: MOVING_AVERAGE_COLORS[windowSize],
         data: buildMovingAverageSeries(chartPrices, windowSize),
       })),
-    [chartPrices, timeframe],
+    [chartPrices, timeframe, t],
   );
   const news = useMemo(
     () => newsQuery.data?.pages.flat() ?? detailQuery.data?.news ?? [],
@@ -239,8 +240,8 @@ export function StockDetailModal({
   const sparklineTrendPct = summarizeSparklineTrend(stock.sparkline);
   
   const snapshotContextLabel = snapshotMeta?.mode === "snapshot"
-    ? `Saved snapshot metrics from ${formatDateLabel(snapshotMeta.as_of_date)}`
-    : "Live comparison metrics";
+    ? t("portfolio.detail.context.savedFrom", { date: formatDateLabel(snapshotMeta.as_of_date) })
+    : t("portfolio.detail.context.liveMetrics");
     
   const snapshotTrendPoints = useMemo(
     () => stockSnapshotHistoryQuery.data?.points ?? [],
@@ -271,43 +272,43 @@ export function StockDetailModal({
     }>>((acc, point) => {
       acc[point.snapshot_version] = {
         roicMinusWacc: buildPortfolioDisplayMetric(point.roic_minus_wacc, {
-          missingReason: "Saved snapshot is missing ROIC - WACC for this ticker.",
-          suspiciousReason: "Saved snapshot ROIC - WACC falls outside the sanity range.",
+          missingReason: t("portfolio.detail.metric.missingRoicWacc"),
+          suspiciousReason: t("portfolio.detail.metric.suspiciousRoicWacc"),
         }),
         dcfUpside: buildPortfolioDisplayMetric(point.dcf_implied_return, {
           missingReason: point.dcf_refusal
             ? impliedReturnRefusalText(point.dcf_refusal)
-            : "Saved snapshot is missing DCF value vs price for this ticker.",
-          suspiciousReason: "Saved snapshot DCF value vs price falls outside the sanity range.",
+            : t("portfolio.detail.metric.missingDcf"),
+          suspiciousReason: t("portfolio.detail.metric.suspiciousDcf"),
         }),
         impliedVsWacc: buildPortfolioDisplayMetric(point.implied_return_spread, {
           // A code means refused in a v3 snapshot; no code means the snapshot predates v3.
           missingReason: impliedReturnRefusalText(point.implied_return_refusal),
-          suspiciousReason: "Saved snapshot implied return vs WACC falls outside the sanity range.",
+          suspiciousReason: t("portfolio.detail.metric.suspiciousImpliedWacc"),
         }),
       };
       return acc;
     }, {})
-  ), [snapshotTrendPoints]);
+  ), [snapshotTrendPoints, t]);
   const detailErrorMessage = detailQuery.error instanceof Error
     ? detailQuery.error.message
-    : "Could not load OHLC history and supporting stock detail data for this ticker.";
+    : t("portfolio.detail.chart.unavailableFallback");
   const newsErrorMessage = newsQuery.error instanceof Error
     ? newsQuery.error.message
-    : `Could not load filtered headlines for ${stock.ticker}.`;
+    : t("portfolio.detail.news.fallbackError", { ticker: stock.ticker });
   const timelineGroups = useMemo(() => (
     snapshotTrendPoints.length === 0
       ? []
       : [
           {
             id: `${stock.ticker}-history`,
-            label: "Saved Snapshot History",
+            label: t("portfolio.detail.timeline.group"),
             items: snapshotTrendPoints.map((point) => {
               const metrics = snapshotTimelineMetrics[point.snapshot_version];
               return {
               id: point.snapshot_version,
               title: formatDateLabel(point.as_of_date),
-              subtitle: `${point.snapshot_source} snapshot against ${point.benchmark_ticker}`,
+              subtitle: t("portfolio.detail.timeline.against", { source: point.snapshot_source, benchmark: point.benchmark_ticker }),
               active: point.snapshot_version === activeSnapshotVersion,
               meta: (
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -315,31 +316,31 @@ export function StockDetailModal({
                     className="overflow-inline-ellipsis max-w-full rounded-[var(--radius-2)] bg-[var(--surface)] px-2 py-1 type-caption text-[var(--ink)]"
                     title={point.snapshot_version}
                   >
-                    Version {point.snapshot_version}
+                    {t("portfolio.detail.timeline.version", { version: point.snapshot_version })}
                   </span>
                   <span aria-hidden="true">•</span>
-                  <span>Price {formatCurrencyCompact(point.current_price)}</span>
+                  <span>{t("portfolio.detail.timeline.price", { price: formatCurrencyCompact(point.current_price) })}</span>
                 </div>
               ),
               content: (
                 <div className="grid grid-cols-2 gap-3 type-small md:grid-cols-4">
                   <div className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
-                    <div className="text-[var(--ink-muted)]">ROIC - WACC</div>
+                    <div className="text-[var(--ink-muted)]">{t("portfolio.detail.metric.roicWacc")}</div>
                     <div className={`type-figure-md mt-1 ${metricToneClass(metrics.roicMinusWacc)}`} title={metricDisplayTitle(metrics.roicMinusWacc)}>{metrics.roicMinusWacc.displayValue}</div>
                     {metricSubtitle(metrics.roicMinusWacc) ? <div className="mt-1 type-caption text-[var(--ink-muted)]">{metricSubtitle(metrics.roicMinusWacc)}</div> : null}
                   </div>
                   <div className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
-                    <div className="text-[var(--ink-muted)]">DCF value vs price (one-off gap)</div>
+                    <div className="text-[var(--ink-muted)]">{t("portfolio.detail.metric.dcf")}</div>
                     <div className={`type-figure-md mt-1 ${metricToneClass(metrics.dcfUpside)}`} title={metricDisplayTitle(metrics.dcfUpside)}>{metrics.dcfUpside.displayValue}</div>
                     {metricSubtitle(metrics.dcfUpside) ? <div className="mt-1 type-caption text-[var(--ink-muted)]">{metricSubtitle(metrics.dcfUpside)}</div> : null}
                   </div>
                   <div className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
-                    <div className="text-[var(--ink-muted)]">Implied return vs WACC (pts per year)</div>
+                    <div className="text-[var(--ink-muted)]">{t("portfolio.detail.metric.impliedWacc")}</div>
                     <div className={`type-figure-md mt-1 ${metricToneClass(metrics.impliedVsWacc)}`} title={metricDisplayTitle(metrics.impliedVsWacc)}>{metrics.impliedVsWacc.displayValue}</div>
                     {metricSubtitle(metrics.impliedVsWacc) ? <div className="mt-1 type-caption text-[var(--ink-muted)]">{metricSubtitle(metrics.impliedVsWacc)}</div> : null}
                   </div>
                   <div className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
-                    <div className="text-[var(--ink-muted)]">Market Return</div>
+                    <div className="text-[var(--ink-muted)]">{t("portfolio.detail.metric.marketReturn")}</div>
                     <div className="type-figure-md mt-1 text-[var(--ink)]">{formatMetricPercent(point.market_expected_return)}</div>
                   </div>
                 </div>
@@ -348,7 +349,7 @@ export function StockDetailModal({
             }),
           },
         ]
-  ), [activeSnapshotVersion, snapshotTimelineMetrics, snapshotTrendPoints, stock.ticker]);
+  ), [activeSnapshotVersion, snapshotTimelineMetrics, snapshotTrendPoints, stock.ticker, t]);
 
   useEffect(() => {
     const tickerChanged = previousTickerRef.current !== stock.ticker;
@@ -364,16 +365,16 @@ export function StockDetailModal({
   const handleSaveSector = async () => {
     const normalizedSector = sectorDraft.trim();
     if (normalizedSector === stock.sector.trim()) {
-      setSectorMessage("Sector is already up to date.");
+      setSectorMessage(t("portfolio.detail.sector.upToDate"));
       return;
     }
     setSavingSector(true);
     setSectorMessage(null);
     try {
       await onUpdateSector(stock, normalizedSector);
-      setSectorMessage(`Saved sector for ${stock.ticker}.`);
+      setSectorMessage(t("portfolio.detail.sector.saved", { ticker: stock.ticker }));
     } catch (error) {
-      setSectorMessage(error instanceof Error ? error.message : "Failed to save sector.");
+      setSectorMessage(error instanceof Error ? error.message : t("portfolio.detail.sector.failed"));
     } finally {
       setSavingSector(false);
     }
@@ -381,16 +382,16 @@ export function StockDetailModal({
 
   const handleSaveTheme = async () => {
     if (themeDraft === stock.theme) {
-      setThemeMessage("Theme is already up to date.");
+      setThemeMessage(t("portfolio.detail.theme.upToDate"));
       return;
     }
     setSavingTheme(true);
     setThemeMessage(null);
     try {
       await onUpdateTheme(stock, themeDraft);
-      setThemeMessage(`Saved theme for ${stock.ticker}.`);
+      setThemeMessage(t("portfolio.detail.theme.saved", { ticker: stock.ticker }));
     } catch (error) {
-      setThemeMessage(error instanceof Error ? error.message : "Failed to save theme.");
+      setThemeMessage(error instanceof Error ? error.message : t("portfolio.detail.theme.failed"));
     } finally {
       setSavingTheme(false);
     }
@@ -421,29 +422,29 @@ export function StockDetailModal({
     >
       <section className="mb-4 flex flex-wrap items-center justify-between gap-3 border border-[var(--line)] bg-[var(--surface-raised)] p-4">
         <div>
-          <h3 className="type-panel-title text-[var(--ink)]">Quick portfolio review</h3>
+          <h3 className="type-panel-title text-[var(--ink)]">{t("portfolio.detail.quickReview.title")}</h3>
           <p className="mt-1 type-body text-[var(--ink-muted)]">
-            Stay in the portfolio workflow here, or open the canonical detail route for full standalone ticker analysis.
+            {t("portfolio.detail.quickReview.body")}
           </p>
         </div>
         <Link
           href={`/detail/${encodeURIComponent(stock.ticker)}`}
           className="inline-flex min-h-9 items-center justify-center border border-[var(--line)] px-[var(--space-4)] type-small text-[var(--ink)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--surface)]"
         >
-          View Full Detail
+          {t("portfolio.detail.quickReview.viewFull")}
         </Link>
       </section>
 
       <div className="flex flex-col mb-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-[var(--radius-2)] border border-[var(--line)] bg-[var(--surface)] px-3 py-1 type-small text-[var(--ink-muted)]">
-            Sector
+            {t("portfolio.detail.sector.label")}
           </span>
           <input
             type="text"
             value={sectorDraft}
             onChange={(event) => setSectorDraft(event.target.value)}
-            aria-label="Stock sector"
+            aria-label={t("portfolio.detail.sector.aria")}
             className="rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-body text-[var(--ink)]"
           />
           <button
@@ -452,7 +453,7 @@ export function StockDetailModal({
             disabled={savingSector}
             className="inline-flex items-center justify-center rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 type-small text-[var(--ink-muted)] hover:text-[var(--ink)] disabled:opacity-50"
           >
-            {savingSector ? "Saving sector..." : "Save Sector"}
+            {savingSector ? t("portfolio.detail.sector.saving") : t("portfolio.detail.sector.save")}
           </button>
         </div>
         {sectorMessage && <p className="mt-2 type-small text-[var(--ink-muted)]">{sectorMessage}</p>}
@@ -462,15 +463,15 @@ export function StockDetailModal({
         <div className="flex flex-col mb-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-[var(--radius-2)] border border-[var(--line)] bg-[var(--surface)] px-3 py-1 type-small text-[var(--ink-muted)]">
-              Theme
+              {t("portfolio.detail.theme.label")}
             </span>
             <select
               value={themeDraft}
               onChange={(event) => setThemeDraft(event.target.value)}
-              aria-label="Stock theme"
+              aria-label={t("portfolio.detail.theme.aria")}
               className="rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-body text-[var(--ink)]"
             >
-              <option value="">{locale === "ko" ? "테마 없음" : "No theme"}</option>
+              <option value="">{t("portfolio.detail.theme.none")}</option>
               {themes.map((theme) => (
                 <option key={theme.id} value={theme.id}>
                   {locale === "ko" ? theme.ko : theme.en}
@@ -478,7 +479,7 @@ export function StockDetailModal({
               ))}
               {storedThemeUnknown && (
                 <option value={stock.theme} disabled>
-                  {locale === "ko" ? "기타" : "Other"}
+                  {t("portfolio.detail.theme.other")}
                 </option>
               )}
             </select>
@@ -488,7 +489,7 @@ export function StockDetailModal({
               disabled={savingTheme}
               className="inline-flex items-center justify-center rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 type-small text-[var(--ink-muted)] hover:text-[var(--ink)] disabled:opacity-50"
             >
-              {savingTheme ? "Saving theme..." : "Save Theme"}
+              {savingTheme ? t("portfolio.detail.theme.saving") : t("portfolio.detail.theme.save")}
             </button>
           </div>
           {themeMessage && <p className="mt-2 type-small text-[var(--ink-muted)]">{themeMessage}</p>}
@@ -497,23 +498,23 @@ export function StockDetailModal({
 
       <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4 mb-4">
         <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
-          <div className="type-caption uppercase text-[var(--ink-muted)]">Price</div>
+          <div className="type-caption uppercase text-[var(--ink-muted)]">{t("portfolio.detail.stat.price")}</div>
           <div className="mt-2 type-figure-md tabular-nums text-[var(--ink)]">
             {currentPriceLabel}
           </div>
         </div>
         <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
-          <div className="type-caption uppercase text-[var(--ink-muted)]">Day Delta</div>
+          <div className="type-caption uppercase text-[var(--ink-muted)]">{t("portfolio.detail.stat.dayDelta")}</div>
           <div className={`mt-2 type-figure-md tabular-nums ${priceTone}`}>
             {priceChangePct >= 0 ? "+" : ""}{formatNumber(priceChangePct / 100, "percent", { digits: 1 })}
           </div>
         </div>
         <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
-          <div className="type-caption uppercase text-[var(--ink-muted)]">Sector</div>
-          <div className="mt-2 type-panel-title text-[var(--ink)]">{stock.sector || "Unassigned"}</div>
+          <div className="type-caption uppercase text-[var(--ink-muted)]">{t("portfolio.detail.stat.sector")}</div>
+          <div className="mt-2 type-panel-title text-[var(--ink)]">{stock.sector || t("portfolio.detail.stat.unassigned")}</div>
         </div>
         <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
-          <div className="type-caption uppercase text-[var(--ink-muted)]">Weight</div>
+          <div className="type-caption uppercase text-[var(--ink-muted)]">{t("portfolio.detail.stat.weight")}</div>
           <div className="mt-2 type-figure-md tabular-nums text-[var(--ink)]">{formatNumber(stock.weight, "percent", { digits: 1 })}</div>
         </div>
       </section>
@@ -524,8 +525,8 @@ export function StockDetailModal({
             <div>
               <h3 className="type-panel-title text-[var(--ink)]">
                 <InfoTooltip
-                  label="OHLC Candlestick + Volume"
-                  description="Candles encode open, high, low, and close for each selected period. Volume bars show traded activity. Moving averages use 5, 20, 60, and 120 period closes, recalculated from daily or monthly bars depending on the selected timeframe."
+                  label={t("portfolio.detail.chart.title")}
+                  description={t("portfolio.detail.chart.description")}
                 />
               </h3>
               <div className="mt-2 flex flex-wrap gap-2 type-small text-[var(--ink-muted)]">
@@ -548,9 +549,9 @@ export function StockDetailModal({
               >
                 {isInWatchlist
                   ? stock.weight > 0
-                    ? "Review Portfolio Weight"
-                    : "Add To Portfolio"
-                  : "Add To Portfolio"}
+                    ? t("portfolio.detail.action.reviewWeight")
+                    : t("portfolio.detail.action.addToPortfolio")
+                  : t("portfolio.detail.action.addToPortfolio")}
               </button>
               {isInWatchlist && (
                 <button
@@ -561,14 +562,14 @@ export function StockDetailModal({
                   }}
                   className="inline-flex items-center justify-center rounded-[var(--radius-1)] border border-[var(--status-error-border)] bg-[var(--status-error-surface)] px-3 py-2 type-small text-[var(--status-error-ink)] hover:bg-[var(--status-error-surface)]"
                 >
-                  Remove From Watchlist
+                  {t("portfolio.detail.action.removeFromWatchlist")}
                 </button>
               )}
             </div>
           </div>
           <OHLCVChartCard
-            title="OHLC Candlestick + Volume"
-            description="Candles encode open, high, low, and close for each selected period. Volume bars show traded activity. Moving averages use 5, 20, 60, and 120 period closes, recalculated from daily or monthly bars depending on the selected timeframe."
+            title={t("portfolio.detail.chart.title")}
+            description={t("portfolio.detail.chart.description")}
             data={candles}
             volumeData={volume}
             lineSeriesData={movingAverageSeries}
@@ -582,8 +583,8 @@ export function StockDetailModal({
             eventGranularity={timeframe === "monthly" ? "month" : "day"}
             onTimeframeChange={(value) => setTimeframe(value as "daily" | "monthly")}
             timeframeOptions={[
-              { value: "daily", label: "Daily" },
-              { value: "monthly", label: "Monthly" },
+              { value: "daily", label: t("portfolio.detail.chart.daily") },
+              { value: "monthly", label: t("portfolio.detail.chart.monthly") },
             ]}
             legend={movingAverageSeries.map((series) => (
               <span
@@ -594,15 +595,15 @@ export function StockDetailModal({
                 {series.title}
               </span>
             ))}
-            emptyDescription="No OHLC history is available for this ticker yet."
+            emptyDescription={t("portfolio.detail.chart.noHistory")}
           />
           {detailQuery.isError ? (
             <ErrorState
-              title="Stock Detail Unavailable"
+              title={t("portfolio.detail.chart.unavailable")}
               message={detailErrorMessage}
             />
           ) : !detailQuery.isLoading && candles.length === 0 ? (
-            <StatusPanel title="No Price Data" message="No OHLC history is available for this ticker yet." tone="warning" />
+            <StatusPanel title={t("portfolio.detail.chart.noPriceData")} message={t("portfolio.detail.chart.noHistory")} tone="warning" />
           ) : null}
         </section>
 
@@ -611,18 +612,18 @@ export function StockDetailModal({
         <section data-testid="stock-detail-news" className="flex min-h-[24rem] flex-col border border-[var(--line)] bg-[var(--surface-raised)] p-4 lg:h-0 lg:min-h-full">
           <h3 className="type-panel-title text-[var(--ink)]">
             <InfoTooltip
-              label="Ticker News Feed (filtered)"
-              description="Latest stock-specific headlines crawled from Google News RSS and stored locally by ticker. This section stays filtered to the selected holding."
+              label={t("portfolio.detail.news.title")}
+              description={t("portfolio.detail.news.description")}
             />
           </h3>
-          <p className="mt-1 type-small text-[var(--ink-muted)]">Filtered news for {stock.ticker}, ordered by date with today highlights preserved.</p>
+          <p className="mt-1 type-small text-[var(--ink-muted)]">{t("portfolio.detail.news.intro", { ticker: stock.ticker })}</p>
           <div className="mt-4 min-h-0 flex-1">
             {newsQuery.isLoading ? (
-              <EmptyState title="Loading filtered news..." />
+              <EmptyState title={t("portfolio.detail.news.loading")} />
             ) : newsQuery.isError && stockNewsItems.length === 0 ? (
-              <ErrorState title="Filtered News Unavailable" message={newsErrorMessage} />
+              <ErrorState title={t("portfolio.detail.news.unavailable")} message={newsErrorMessage} />
             ) : stockNewsItems.length === 0 ? (
-              <EmptyState title="No stock-specific news found" description={`No filtered headlines are available for ${stock.ticker} yet.`} />
+              <EmptyState title={t("portfolio.detail.news.emptyTitle")} description={t("portfolio.detail.news.emptyBody", { ticker: stock.ticker })} />
             ) : (
               <NewsFeedList
                 fill
@@ -642,161 +643,161 @@ export function StockDetailModal({
           <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
               <div className="flex items-center justify-between gap-2 type-caption uppercase text-[var(--ink-muted)]">
-                <span>ROIC - WACC</span>
+                <span>{t("portfolio.detail.metric.roicWacc")}</span>
                 {metricAuditQuery.data ? <MetricQualityBadge quality={metricAuditQuery.data.spread.quality} /> : null}
               </div>
               <div className={`mt-2 type-figure-md tabular-nums ${metricToneClass(comparisonMetrics.roicMinusWacc)}`} title={metricDisplayTitle(comparisonMetrics.roicMinusWacc)}>
                 {metricAuditQuery.data ? formatAuditMetricValue(metricAuditQuery.data.spread) : comparisonMetrics.roicMinusWacc.displayValue}
               </div>
               <p className="mt-2 type-small text-[var(--ink-muted)]">
-                {metricAuditQuery.data ? metricAuditReason(metricAuditQuery.data.spread) : metricSubtitle(comparisonMetrics.roicMinusWacc) ?? "Positive values imply returns on invested capital are exceeding the current capital cost estimate."}
+                {metricAuditQuery.data ? metricAuditReason(metricAuditQuery.data.spread) : metricSubtitle(comparisonMetrics.roicMinusWacc) ?? t("portfolio.detail.metric.roicWaccHelp")}
               </p>
             </div>
             <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
               <div className="flex items-center justify-between gap-2 type-caption uppercase text-[var(--ink-muted)]">
-                <span>DCF value vs price (one-off gap)</span>
+                <span>{t("portfolio.detail.metric.dcf")}</span>
                 <MetricQualityBadge quality={comparisonMetrics.dcfUpside.quality} />
               </div>
               <div className={`mt-2 type-figure-md tabular-nums ${metricToneClass(comparisonMetrics.dcfUpside)}`} title={metricDisplayTitle(comparisonMetrics.dcfUpside)}>
                 {comparisonMetrics.dcfUpside.displayValue}
               </div>
               <p className="mt-2 type-small text-[var(--ink-muted)]">
-                {metricSubtitle(comparisonMetrics.dcfUpside) ?? "Snapshot-side upside or downside versus current price."}
+                {metricSubtitle(comparisonMetrics.dcfUpside) ?? t("portfolio.detail.metric.dcfHelp")}
               </p>
             </div>
             <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
               <div className="flex items-center justify-between gap-2 type-caption uppercase text-[var(--ink-muted)]">
-                <span>Implied return vs WACC (pts per year)</span>
+                <span>{t("portfolio.detail.metric.impliedWacc")}</span>
                 <MetricQualityBadge quality={comparisonMetrics.impliedVsWacc.quality} />
               </div>
               <div className={`mt-2 type-figure-md tabular-nums ${metricToneClass(comparisonMetrics.impliedVsWacc)}`} title={metricDisplayTitle(comparisonMetrics.impliedVsWacc)}>
                 {comparisonMetrics.impliedVsWacc.displayValue}
               </div>
               <p className="mt-2 type-small text-[var(--ink-muted)]">
-                {metricSubtitle(comparisonMetrics.impliedVsWacc) ?? "The annual return today's market price implies for the whole business, minus its WACC, from the saved comparison snapshot."}
+                {metricSubtitle(comparisonMetrics.impliedVsWacc) ?? t("portfolio.detail.metric.impliedHelp")}
               </p>
             </div>
             <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
               <div className="flex items-center justify-between gap-2 type-caption uppercase text-[var(--ink-muted)]">
-                <span>Volatility</span>
+                <span>{t("portfolio.detail.metric.volatility")}</span>
                 <MetricQualityBadge quality={comparisonMetrics.volatility.quality} />
               </div>
               <div className={`mt-2 type-figure-md tabular-nums ${comparisonMetrics.volatility.quality === "missing" || comparisonMetrics.volatility.quality === "invalid" || comparisonMetrics.volatility.quality === "suspicious" ? "text-[var(--status-warning-ink)]" : "text-[var(--ink)]"}`} title={metricDisplayTitle(comparisonMetrics.volatility)}>
                 {comparisonMetrics.volatility.displayValue}
               </div>
               <p className="mt-2 type-small text-[var(--ink-muted)]">
-                {metricSubtitle(comparisonMetrics.volatility) ?? "Estimated from recent local price history for quick portfolio comparison."}
+                {metricSubtitle(comparisonMetrics.volatility) ?? t("portfolio.detail.metric.volatilityHelp")}
               </p>
             </div>
           </div>
           <div className="mt-3 border border-[var(--line)] bg-[var(--surface-raised)] p-4">
             <div className="flex flex-col gap-1">
-              <h4 className="type-panel-title text-[var(--ink)]">Snapshot Context</h4>
+              <h4 className="type-panel-title text-[var(--ink)]">{t("portfolio.detail.context.title")}</h4>
               <p className="type-body text-[var(--ink-muted)]">
-                {snapshotContextLabel}. This is the review frame for the stock-level comparison metrics shown in this modal.
+                {t("portfolio.detail.context.body", { label: snapshotContextLabel })}
               </p>
             </div>
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
               <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
-                <div className="text-[var(--ink-muted)]">As Of</div>
+                <div className="text-[var(--ink-muted)]">{t("portfolio.detail.context.asOf")}</div>
                 <div className="type-mono mt-1 text-[var(--ink)]">
-                  {snapshotMeta ? formatDateLabel(snapshotMeta.as_of_date) : "Live"}
+                  {snapshotMeta ? formatDateLabel(snapshotMeta.as_of_date) : t("portfolio.detail.context.liveValue")}
                 </div>
               </div>
               <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
-                <div className="text-[var(--ink-muted)]">Source</div>
+                <div className="text-[var(--ink-muted)]">{t("portfolio.detail.context.source")}</div>
                 <div className="type-mono mt-1 overflow-inline-ellipsis capitalize text-[var(--ink)]" title={snapshotMeta?.snapshot_source ?? snapshotMeta?.mode ?? "live"}>
                   {snapshotMeta?.snapshot_source ?? snapshotMeta?.mode ?? "live"}
                 </div>
               </div>
               <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
-                <div className="text-[var(--ink-muted)]">Universe</div>
+                <div className="text-[var(--ink-muted)]">{t("portfolio.detail.context.universe")}</div>
                 <div className="type-mono mt-1 overflow-inline-ellipsis text-[var(--ink)]" title={portfolioComparisonUniverseLabel(effectiveComparisonUniverse)}>
                   {portfolioComparisonUniverseLabel(effectiveComparisonUniverse)}
                 </div>
               </div>
               <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
-                <div className="text-[var(--ink-muted)]">Benchmark</div>
+                <div className="text-[var(--ink-muted)]">{t("portfolio.detail.context.benchmark")}</div>
                 <div className="type-mono mt-1 overflow-inline-ellipsis text-[var(--ink)]" title={effectiveComparisonBenchmarkTicker}>{effectiveComparisonBenchmarkTicker}</div>
               </div>
               <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
-                <div className="text-[var(--ink-muted)]">Version</div>
-                <div className="mt-1 overflow-mono-block text-[var(--ink)]" title={activeSnapshotVersion || "Live"}>{activeSnapshotVersion || "Live"}</div>
+                <div className="text-[var(--ink-muted)]">{t("portfolio.detail.context.version")}</div>
+                <div className="mt-1 overflow-mono-block text-[var(--ink)]" title={activeSnapshotVersion || t("portfolio.detail.context.liveValue")}>{activeSnapshotVersion || t("portfolio.detail.context.liveValue")}</div>
               </div>
             </div>
             {sparklineTrendPct != null && (
               <p className="mt-3 type-body text-[var(--ink-muted)]">
-                Recent price trend: {sparklineTrendPct >= 0 ? "+" : ""}{formatNumber(sparklineTrendPct / 100, "percent", { digits: 2 })}.
+                {t("portfolio.detail.trend", { value: `${sparklineTrendPct >= 0 ? "+" : ""}${formatNumber(sparklineTrendPct / 100, "percent", { digits: 2 })}` })}
               </p>
             )}
           </div>
           {flaggedComparisonMetricCount > 0 && (
             <div className="mt-3 border border-[var(--status-warning-border)] bg-[var(--status-warning-surface)] p-3 type-body text-[var(--status-warning-ink)]">
-              {flaggedComparisonMetricCount} stock metric value{flaggedComparisonMetricCount === 1 ? "" : "s"} for {stock.ticker} {flaggedComparisonMetricCount === 1 ? "is" : "are"} currently flagged as outlier data and rendered as {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}{/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold">N/A</span>. Treat the price chart and saved snapshot history as the primary review context until fresher fundamentals are available.
+              {flaggedComparisonMetricCount === 1 ? t("portfolio.detail.flagged.one", { ticker: stock.ticker }) : t("portfolio.detail.flagged.many", { ticker: stock.ticker, count: flaggedComparisonMetricCount })}{/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}{/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold">N/A</span>{t("portfolio.detail.flagged.tail")}
             </div>
           )}
           <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
             {metricAuditQuery.isLoading ? (
               <div className="xl:col-span-2">
-                <EmptyState title="Loading ROIC/WACC audit..." />
+                <EmptyState title={t("portfolio.detail.audit.loading")} />
               </div>
             ) : metricAuditQuery.isError ? (
               <div className="xl:col-span-2">
-                <ErrorState title="Metric Audit Unavailable" message={`Could not load ROIC/WACC audit inputs for ${stock.ticker}.`} />
+                <ErrorState title={t("portfolio.detail.audit.unavailable")} message={t("portfolio.detail.audit.unavailableBody", { ticker: stock.ticker })} />
               </div>
             ) : (
               <>
-                <MetricAuditPanel audit={metricAuditQuery.data ?? null} metric="roic" title="ROIC Audit" />
-                <MetricAuditPanel audit={metricAuditQuery.data ?? null} metric="wacc" title="WACC Audit" />
+                <MetricAuditPanel audit={metricAuditQuery.data ?? null} metric="roic" title={t("portfolio.detail.audit.roicTitle")} />
+                <MetricAuditPanel audit={metricAuditQuery.data ?? null} metric="wacc" title={t("portfolio.detail.audit.waccTitle")} />
               </>
             )}
           </div>
           <div className="mt-4 border border-[var(--line)] bg-[var(--surface-raised)] p-4">
             <div className="flex flex-col gap-1">
-              <h4 className="type-panel-title text-[var(--ink)]">Stock History Timeline</h4>
+              <h4 className="type-panel-title text-[var(--ink)]">{t("portfolio.detail.timeline.title")}</h4>
               <p className="type-small text-[var(--ink-muted)]">
-                Review how saved comparison metrics changed across persisted snapshots for {stock.ticker}.
+                {t("portfolio.detail.timeline.intro", { ticker: stock.ticker })}
               </p>
               {snapshotMeta?.mode === "snapshot" && (
                 <p className="type-small text-[var(--ink-muted)]">
-                  Review context: {formatDateLabel(snapshotMeta.as_of_date)} snapshot, {portfolioComparisonUniverseLabel(effectiveComparisonUniverse)}, benchmark {effectiveComparisonBenchmarkTicker}.
+                  {t("portfolio.detail.timeline.context", { date: formatDateLabel(snapshotMeta.as_of_date), universe: portfolioComparisonUniverseLabel(effectiveComparisonUniverse), benchmark: effectiveComparisonBenchmarkTicker })}
                 </p>
               )}
             </div>
             {stockSnapshotHistoryQuery.isLoading ? (
               <div className="mt-3">
-                <EmptyState title="Loading stock history timeline..." />
+                <EmptyState title={t("portfolio.detail.timeline.loading")} />
               </div>
             ) : stockSnapshotHistoryQuery.isError ? (
               <div className="mt-3">
-                <ErrorState title="Stock History Unavailable" message="Could not load saved snapshot trend data for this stock." />
+                <ErrorState title={t("portfolio.detail.timeline.unavailable")} message={t("portfolio.detail.timeline.unavailableBody")} />
               </div>
             ) : timelineGroups.length === 0 ? (
               <div className="mt-3">
-                <EmptyState title="No saved stock history yet" description="Saved comparison history will appear here once snapshot versions exist for this ticker." />
+                <EmptyState title={t("portfolio.detail.timeline.emptyTitle")} description={t("portfolio.detail.timeline.emptyBody")} />
               </div>
             ) : (
               <div className="mt-3 space-y-3">
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                   <div className="border border-[var(--line)] bg-[var(--surface)] p-3">
-                    <div className="type-caption uppercase text-[var(--ink-muted)]">Saved Snapshots</div>
+                    <div className="type-caption uppercase text-[var(--ink-muted)]">{t("portfolio.detail.timeline.savedSnapshots")}</div>
                     <div className="mt-1 type-panel-title text-[var(--ink)]">{snapshotTrendPoints.length}</div>
-                    <p className="mt-1 type-small text-[var(--ink-muted)]">Persisted comparison rows currently available for {stock.ticker}.</p>
+                    <p className="mt-1 type-small text-[var(--ink-muted)]">{t("portfolio.detail.timeline.savedSnapshotsBody", { ticker: stock.ticker })}</p>
                   </div>
                   <div className="border border-[var(--line)] bg-[var(--surface)] p-3">
-                    <div className="type-caption uppercase text-[var(--ink-muted)]">Implied return vs WACC trend</div>
+                    <div className="type-caption uppercase text-[var(--ink-muted)]">{t("portfolio.detail.timeline.spreadTrend")}</div>
                     <div data-testid="implied-spread-trend-delta" className={`mt-1 type-panel-title ${expectedSpreadTrendDelta == null ? "text-[var(--ink-muted)]" : expectedSpreadTrendDelta > 0 ? "text-[var(--up)]" : "text-[var(--down)]"}`}>{formatMetricPercent(expectedSpreadTrendDelta)}</div>
-                    <p className="mt-1 type-small text-[var(--ink-muted)]">Latest versus oldest saved implied return vs WACC, only between snapshots that recorded it.</p>
+                    <p className="mt-1 type-small text-[var(--ink-muted)]">{t("portfolio.detail.timeline.spreadTrendBody")}</p>
                   </div>
                   <div className="border border-[var(--line)] bg-[var(--surface)] p-3">
-                    <div className="type-caption uppercase text-[var(--ink-muted)]">Recent Price Sparkline</div>
+                    <div className="type-caption uppercase text-[var(--ink-muted)]">{t("portfolio.detail.timeline.sparkline")}</div>
                     <div className="mt-2 h-10">
                       <Sparkline
                         data={stock.sparkline}
                         height={40}
                       />
                     </div>
-                    <p className="mt-1 type-small text-[var(--ink-muted)]">Recent price path alongside the saved comparison timeline.</p>
+                    <p className="mt-1 type-small text-[var(--ink-muted)]">{t("portfolio.detail.timeline.sparklineBody")}</p>
                   </div>
                 </div>
                 <TimelineList groups={timelineGroups} />
