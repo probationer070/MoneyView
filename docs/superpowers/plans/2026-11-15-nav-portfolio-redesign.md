@@ -22,6 +22,10 @@ Test inventories: `.superpowers/sdd/2026-11-15-nav-portfolio/topnav-inventory.md
 | D11 | /portfolio joins ONE_SCREEN_ROUTES (1280x720, no page scroll). |
 | D12 | Existing-test changes approved as listed in the two inventories, including deleting tests of removed features and the one-screen expectations in corporate-one-screen:614, market-model:120, one-screen-no-scroll:17. Every changed assertion is recorded (file:line, old, new) in the task report. |
 
+| D13 | (owner, after P3a) `portfolio-watchlist.spec.ts` `removeButtons` helper counts holdings as tiles or table rows instead of Remove buttons (476bc15). Approved. |
+| D14 | Weights tab sliders and checkboxes get a hit area of at least 24px; the `test.fixme` "controls inside a panel are big enough to hit" is revived. |
+| D15 | The table view has no news column (news stays on the cards). |
+
 ## Tasks (one at a time; each runs only its own specs; the controller runs the wide regression)
 
 | Task | Scope | Specs |
