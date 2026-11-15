@@ -1,3 +1,10 @@
 [2026-10-13 06:54:15] Web harness failed on port 3101 with API port 8110. 콘솔 창 제목을 설정하는 동안 Win32 내부 오류 "파이프의 다른 끝에 프로세스가 없습니다" 0xE9이(가) 발생했습니다. Microsoft 고객 지원 서비스에 문의하십시오.
 [2026-10-17 14:52:50] Web harness failed on port 3101 with API port 8110. 콘솔 창 제목을 설정하는 동안 Win32 내부 오류 "파이프의 다른 끝에 프로세스가 없습니다" 0xE9이(가) 발생했습니다. Microsoft 고객 지원 서비스에 문의하십시오.
 [2026-10-18 10:45:09] Web harness failed on port 3101 with API port 8110. 콘솔 창 제목을 설정하는 동안 Win32 내부 오류 "파이프의 다른 끝에 프로세스가 없습니다" 0xE9이(가) 발생했습니다. Microsoft 고객 지원 서비스에 문의하십시오.
+[2026-11-04 06:33:47] Web harness failed on port 3101 with API port 8110. 콘솔 창 제목을 설정하는 동안 Win32 내부 오류 "파이프의 다른 끝에 프로세스가 없습니다" 0xE9이(가) 발생했습니다. Microsoft 고객 지원 서비스에 문의하십시오.
+[2026-11-04 07:09:42] Web harness failed on port 3101 with API port 8110. 콘솔 창 제목을 설정하는 동안 Win32 내부 오류 "파이프의 다른 끝에 프로세스가 없습니다" 0xE9이(가) 발생했습니다. Microsoft 고객 지원 서비스에 문의하십시오.
+[2026-11-15 21:26:15] Web harness failed on port 3101 with API port 8110. 콘솔 창 제목을 설정하는 동안 Win32 내부 오류 "파이프의 다른 끝에 프로세스가 없습니다" 0xE9이(가) 발생했습니다. Microsoft 고객 지원 서비스에 문의하십시오.
+[2026-11-15 21:29:46] Web harness failed on port 3101 with API port 8110. 콘솔 창 제목을 설정하는 동안 Win32 내부 오류 "파이프의 다른 끝에 프로세스가 없습니다" 0xE9이(가) 발생했습니다. Microsoft 고객 지원 서비스에 문의하십시오.
+[2026-11-15 22:01:56] Web harness failed on port 3101 with API port 8110. 콘솔 창 제목을 설정하는 동안 Win32 내부 오류 "파이프의 다른 끝에 프로세스가 없습니다" 0xE9이(가) 발생했습니다. Microsoft 고객 지원 서비스에 문의하십시오.
+[2026-11-15 22:11:52] Web harness failed on port 3101 with API port 8110. 콘솔 창 제목을 설정하는 동안 Win32 내부 오류 "파이프의 다른 끝에 프로세스가 없습니다" 0xE9이(가) 발생했습니다. Microsoft 고객 지원 서비스에 문의하십시오.
+[2026-11-15 22:15:54] Web harness failed on port 3101 with API port 8110. 콘솔 창 제목을 설정하는 동안 Win32 내부 오류 "파이프의 다른 끝에 프로세스가 없습니다" 0xE9이(가) 발생했습니다. Microsoft 고객 지원 서비스에 문의하십시오.
