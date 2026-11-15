@@ -71,7 +71,7 @@ async function savePortfolioAllocation(page: Page, ticker: string, allocationPer
 async function refreshPortfolioAnalysis(page: Page) {
   await openPortfolioPanel(page, "attribution");
   await page.getByRole("button", { name: "Refresh Analysis" }).click();
-  await expect(page.getByText(/Refreshing portfolio comparison, snapshot history, and attribution\./)).toBeVisible();
+  await expect(page.getByText(/Refreshing portfolio comparison and attribution\./)).toBeVisible();
 }
 
 test("deleting all holdings leaves the portfolio empty after reload", async ({ page }) => {
@@ -161,21 +161,6 @@ test.describe("wide window layout", () => {
     expect(slack).toBeLessThan(40);
   });
 
-  test("snapshot panel: description spans the panel and the save button stays inside it", async ({ page }) => {
-    await mockPortfolioPageApi(page);
-    await clearAllHoldings(page);
-    await addHolding(page, "AAPL", "Apple Inc.", "Technology");
-    const panel = await openPortfolioPanel(page, "snapshot");
-    const save = panel.getByRole("button", { name: "Save Current As Snapshot" });
-    await expect(save).toBeVisible();
-    const panelBox = await panel.boundingBox();
-    const saveBox = await save.boundingBox();
-    const text = await panel.getByText(/^Snapshot mode is the default daily record/).boundingBox();
-    expect(panelBox && saveBox && text).toBeTruthy();
-    expect(saveBox!.x + saveBox!.width).toBeLessThanOrEqual(panelBox!.x + panelBox!.width);
-    // Stacked above the controls, the description takes most of the panel width (it was a ~70px column).
-    expect(text!.width).toBeGreaterThan(panelBox!.width * 0.6);
-  });
 });
 
 test("clicking a holding opens the stock detail modal", async ({ page }) => {
@@ -485,19 +470,6 @@ test("the trend delta is not taken across a snapshot that recorded no implied re
   await expect(delta).toBeVisible();
   await expect(delta).not.toHaveText("2.00%");
   await expect(delta).toHaveText("N/A");
-});
-
-test("the snapshot summary counts implied returns only over holdings that have one", async ({ page }) => {
-  // Review finding 4: a refused or unrecorded holding is not a holding that fails to beat
-  // WACC. The mock's snapshot has values for AAPL (3.5) and MSFT; MSFT is refused here, so
-  // one holding has a value and it beats WACC.
-  await mockPortfolioPageApi(page, undefined, { nullMetricTicker: "MSFT" });
-  await gotoPortfolio(page);
-  await openPortfolioPanel(page, "snapshot");
-  const card = page.getByTestId("summary-beats-wacc");
-  await expect(card).toContainText("Beats WACC (implied return)");
-  await expect(card).toContainText("1 / 1");
-  await expect(page.getByText("Positive Spread", { exact: true })).toHaveCount(0);
 });
 
 async function openAppleDetailWithHistory(page: Page, points: Array<Record<string, unknown>>) {

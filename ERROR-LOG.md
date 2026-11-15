@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-11-15: refresh-idle-state test used a code that now has reader wording
+
+Date: 2026-11-15
+Command: playwright refresh-idle-state.spec.ts
+Failure: "an engine refusal without reader wording shows the server's message, not its code" expected the server message but received the reader sentence.
+Root cause: 54796f8 gave every engine refusal code a reader sentence, including `wacc_not_above_growth`, the code this test used as its "no reader wording" example, and refresh-idle-state was not in that commit's spec run.
+Fix: the test mocks an uncatalogued code, `unlisted_engine_code`. Confirmed it fails when `unlisted_engine_code` is given a reader sentence in the en `valuation.refusal.*` catalog and passes without it.
+Files changed: apps/web/tests/e2e/refresh-idle-state.spec.ts
+Prevention: when adding catalog entries, grep tests/e2e for the codes being added.
+
 ## 2026-11-03: risk candidates crashed on pandas 3 (read-only correlation matrix)
 
 Date: 2026-11-03

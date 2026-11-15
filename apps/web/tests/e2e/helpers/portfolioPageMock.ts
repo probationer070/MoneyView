@@ -12,7 +12,6 @@ type PortfolioStock = PortfolioStockFixture;
 
 export type PortfolioPageMockStats = {
   comparisonRequests: number;
-  comparisonHistoryRequests: number;
   attributionRequests: number;
   stockDetailRequests: number;
   stockSnapshotHistoryRequests: number;
@@ -199,7 +198,7 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
     benchmarkTicker: "^GSPC",
     customTickers: [] as string[],
   };
-  let snapshotHistory = cloneFixture(snapshotHistoryFixture);
+  const snapshotHistory = cloneFixture(snapshotHistoryFixture);
   const snapshotRowsByVersion: Record<string, Array<(typeof benchmarkUniverseFixture.rows)[number]>> = {
     "2026-04-11|portfolio_plus_benchmark|^GSPC||2026-04-11T12:00:00Z": cloneFixture(benchmarkUniverseFixture.rows),
     "2026-04-10|portfolio_plus_benchmark|^GSPC||2026-04-10T12:00:00Z": [
@@ -537,52 +536,6 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
       });
     }
 
-    if (pathname === `${API_PREFIX}/corporate/comparison/history` && method === "GET") {
-      if (stats) stats.comparisonHistoryRequests += 1;
-      const comparisonUniverse = url.searchParams.get("comparison_universe") ?? "portfolio_plus_benchmark";
-      const benchmarkTicker = (url.searchParams.get("benchmark_ticker") ?? "^GSPC").toUpperCase();
-      const customTickers = (url.searchParams.get("custom_tickers") ?? "")
-        .split(",")
-        .map((ticker) => ticker.trim().toUpperCase())
-        .filter(Boolean);
-      return json(route, {
-        status: "ok",
-        data: {
-          ...cloneFixture(snapshotHistory),
-          comparison_universe: comparisonUniverse,
-          benchmark_ticker: benchmarkTicker,
-          custom_tickers: customTickers,
-        },
-      });
-    }
-
-    if (pathname === `${API_PREFIX}/corporate/comparison/snapshot-version` && method === "GET") {
-      const snapshotVersion = url.searchParams.get("snapshot_version") ?? portfolioComparisonSnapshot.snapshot_version;
-      const rows = cloneFixture(snapshotRowsByVersion[snapshotVersion] ?? benchmarkUniverseFixture.rows);
-      const point = snapshotHistory.points.find((entry) => entry.snapshot_version === snapshotVersion);
-      selectedSnapshotUniverse.comparisonUniverse = point?.comparison_universe ?? portfolioComparisonSnapshot.comparison_universe;
-      selectedSnapshotUniverse.benchmarkTicker = (point?.benchmark_ticker ?? portfolioComparisonSnapshot.benchmark_ticker).toUpperCase();
-      selectedSnapshotUniverse.customTickers = cloneFixture(snapshotHistory.custom_tickers ?? portfolioComparisonSnapshot.custom_tickers);
-      return json(route, {
-        status: "ok",
-        data: {
-          market_expected_return: benchmarkUniverseFixture.market_expected_return,
-          risk_free_rate: benchmarkUniverseFixture.risk_free_rate,
-          equity_risk_premium: benchmarkUniverseFixture.equity_risk_premium,
-          stock_expected_return_method: benchmarkUniverseFixture.stock_expected_return_method,
-          comparison_reference_return_method: benchmarkUniverseFixture.comparison_reference_return_method,
-          snapshot: {
-            ...cloneFixture(portfolioComparisonSnapshot),
-            as_of_date: point?.as_of_date ?? portfolioComparisonSnapshot.as_of_date,
-            generated_at: point?.generated_at ?? portfolioComparisonSnapshot.generated_at,
-            snapshot_version: snapshotVersion,
-            snapshot_source: point?.snapshot_source ?? portfolioComparisonSnapshot.snapshot_source,
-          },
-          rows,
-        },
-      });
-    }
-
     if (pathname === `${API_PREFIX}/corporate/comparison/stock-history` && method === "GET") {
       if (stats) stats.stockSnapshotHistoryRequests += 1;
       const ticker = (url.searchParams.get("ticker") ?? "AAPL").toUpperCase();
@@ -709,29 +662,6 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
       const ticker = pathname.split("/").at(-1) ?? "";
       watchlist = watchlist.filter((item) => item.ticker !== ticker);
       return json(route, { status: "ok", ticker });
-    }
-
-    if (pathname === `${API_PREFIX}/corporate/comparison/snapshot-version` && method === "DELETE") {
-      const snapshotVersion = url.searchParams.get("snapshot_version") ?? "";
-      if (!snapshotVersion || !snapshotHistory.points.some((point) => point.snapshot_version === snapshotVersion)) {
-        return route.fulfill({
-          status: 404,
-          contentType: "application/json",
-          body: JSON.stringify({ detail: `snapshot version not found: ${snapshotVersion}` }),
-        });
-      }
-      snapshotHistory = {
-        ...snapshotHistory,
-        points: snapshotHistory.points.filter((point) => point.snapshot_version !== snapshotVersion),
-      };
-      delete snapshotRowsByVersion[snapshotVersion];
-      return json(route, {
-        status: "ok",
-        data: {
-          snapshot_version: snapshotVersion,
-          deleted_rows: 1,
-        },
-      });
     }
 
     if (pathname === `${API_PREFIX}/portfolio/watchlist/sync` && method === "POST") {

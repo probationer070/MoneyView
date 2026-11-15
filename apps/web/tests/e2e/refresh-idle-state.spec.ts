@@ -11,7 +11,6 @@ const CORPORATE_QUARTERLY_CACHE_KEY = "moneyview:corporate-quarterly-statements-
 const CORPORATE_PRICE_HISTORY_CACHE_KEY = "moneyview:corporate-price-history-cache:v1";
 const CORPORATE_ACTIVE_TICKER_KEY = "moneyview:corporate-active-ticker:v1";
 const PORTFOLIO_COMPARISON_CACHE_KEY = "moneyview.portfolio.comparison-cache.v1";
-const PORTFOLIO_COMPARISON_HISTORY_CACHE_KEY = "moneyview.portfolio.comparison-history-cache.v1";
 const PORTFOLIO_ATTRIBUTION_CACHE_KEY = "moneyview.portfolio.attribution-cache.v1";
 
 function corporateStats(): CorporatePageMockStats {
@@ -332,7 +331,6 @@ test("corporate page refresh labels stale source-data cache for a different sele
 test("portfolio first load auto-loads the latest comparison snapshot while history and attribution stay idle until refresh", async ({ page }) => {
   const stats: PortfolioPageMockStats = {
     comparisonRequests: 0,
-    comparisonHistoryRequests: 0,
     attributionRequests: 0,
     stockDetailRequests: 0,
     stockSnapshotHistoryRequests: 0,
@@ -346,14 +344,12 @@ test("portfolio first load auto-loads the latest comparison snapshot while histo
   await expect(page.getByText("Attribution stays idle on first load. Click Refresh Analysis when you want current portfolio attribution.")).toBeVisible();
   await page.waitForTimeout(300);
   expect(stats.comparisonRequests).toBe(1);
-  expect(stats.comparisonHistoryRequests).toBe(0);
   expect(stats.attributionRequests).toBe(0);
 });
 
 test("portfolio renders cached analysis without auto-fetch, refreshes on demand, and keeps detail fetches modal-gated", async ({ page }) => {
   const stats: PortfolioPageMockStats = {
     comparisonRequests: 0,
-    comparisonHistoryRequests: 0,
     attributionRequests: 0,
     stockDetailRequests: 0,
     stockSnapshotHistoryRequests: 0,
@@ -419,35 +415,6 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
             implied_return_spread: 3.5,
             implied_return_refusal: null,
             dcf_refusal: null,
-          },
-        ],
-      },
-      lastUpdatedAt: "2026-04-10T09:00:00Z",
-    },
-    [PORTFOLIO_COMPARISON_HISTORY_CACHE_KEY]: {
-      snapshot: {
-        comparisonUniverse: "portfolio_plus_benchmark",
-        benchmarkTicker: "^GSPC",
-        customTickersInput: "",
-        holdingsSignature: "AAPL:0.200000|MSFT:0.200000|NVDA:0.200000|GOOGL:0.200000|AMZN:0.200000",
-      },
-      result: {
-        comparison_universe: "portfolio_plus_benchmark",
-        benchmark_ticker: "^GSPC",
-        custom_tickers: [],
-        points: [
-          {
-            as_of_date: "2026-04-10",
-            generated_at: "2026-04-10T09:00:00Z",
-            snapshot_version: "cached-portfolio",
-            snapshot_source: "cached",
-            comparison_universe: "portfolio_plus_benchmark",
-            benchmark_ticker: "^GSPC",
-            stock_count: 2,
-            average_implied_return_spread: 2.4,
-            average_roic_minus_wacc: 6.0,
-            average_dcf_value: 220.5,
-            market_expected_return: 9.7,
           },
         ],
       },
@@ -536,16 +503,14 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
   await expect(page.getByText("8.0%").first()).toBeVisible();
   await page.waitForTimeout(300);
   expect(stats.comparisonRequests).toBe(1);
-  expect(stats.comparisonHistoryRequests).toBe(0);
   expect(stats.attributionRequests).toBe(0);
   expect(stats.stockDetailRequests).toBe(0);
   expect(stats.stockSnapshotHistoryRequests).toBe(0);
 
   await page.getByRole("button", { name: "Refresh Analysis" }).click();
   await expect.poll(() => stats.comparisonRequests).toBe(2);
-  await expect.poll(() => stats.comparisonHistoryRequests).toBe(1);
   await expect.poll(() => stats.attributionRequests).toBe(1);
-  await expect(page.getByText(/Refreshing portfolio comparison, snapshot history, and attribution\./)).toBeVisible();
+  await expect(page.getByText(/Refreshing portfolio comparison and attribution\./)).toBeVisible();
 
   await openPortfolioPanel(page, "allocation");
   await page.getByLabel("Add to Watchlist only").check();
@@ -636,12 +601,12 @@ test("an engine refusal without reader wording shows the server's message, not i
   await mockCorporatePageApi(page);
   await page.route("**/api/v1/corporate/dcf/*/stream", (route) => route.fulfill({
     status: 422, contentType: "application/json",
-    body: JSON.stringify({ detail: { code: "wacc_not_above_growth", message: "WACC must exceed terminal growth for a terminal value to exist." } }),
+    body: JSON.stringify({ detail: { code: "unlisted_engine_code", message: "WACC must exceed terminal growth for a terminal value to exist." } }),
   }));
   await page.goto("/corporate", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: /Corporate Analysis/i })).toBeVisible({ timeout: 60_000 });
   await page.getByRole("button", { name: "Refresh DCF" }).click();
   const refusal = page.getByTestId("dcf-refusal");
   await expect(refusal).toContainText("WACC must exceed terminal growth");
-  await expect(refusal).not.toContainText("wacc_not_above_growth");
+  await expect(refusal).not.toContainText("unlisted_engine_code");
 });

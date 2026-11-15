@@ -55,8 +55,6 @@ test("portfolio", async ({ page }) => {
   await page.goto("/portfolio", { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { name: "Portfolio", exact: true })).toBeVisible({ timeout: 60_000 });
   await shot(page, "portfolio");
-  await openPortfolioPanel(page, "snapshot");
-  await shot(page, "portfolio-snapshot");
   await openPortfolioPanel(page, "holdings");
   const holding = page.locator('[role="button"]').filter({ hasText: /Inc\.|Corporation|Apple|Microsoft/ }).first();
   await holding.click();

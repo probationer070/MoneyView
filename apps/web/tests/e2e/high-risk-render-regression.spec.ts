@@ -20,7 +20,6 @@ function corporateStats(): CorporatePageMockStats {
 function portfolioStats(): PortfolioPageMockStats {
   return {
     comparisonRequests: 0,
-    comparisonHistoryRequests: 0,
     attributionRequests: 0,
     stockDetailRequests: 0,
     stockSnapshotHistoryRequests: 0,
@@ -78,7 +77,6 @@ test("portfolio analysis and holdings render state survives view and viewport ch
   await openPortfolioPanel(page, "attribution");
   await page.getByRole("button", { name: "Refresh Analysis" }).click();
   await expect.poll(() => stats.comparisonRequests).toBe(2);
-  await expect.poll(() => stats.comparisonHistoryRequests).toBe(1);
   await expect.poll(() => stats.attributionRequests).toBe(1);
 
   await expect(page.getByText("Portfolio Return")).toBeVisible();

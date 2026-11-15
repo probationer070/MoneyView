@@ -32,7 +32,6 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState, SkeletonCard } from "@/components/ui/LoadingState";
 import { ActionButton } from "@/components/ui/ActionButton";
-import { PortfolioSnapshotSummary } from "./components/PortfolioSnapshotSummary";
 import { PortfolioAttributionSummary } from "./components/PortfolioAttributionSummary";
 import { PortfolioAllocationEditor } from "./components/PortfolioAllocationEditor";
 import { PortfolioCommandCenter } from "./components/PortfolioCommandCenter";
@@ -43,10 +42,6 @@ import { WatchlistPeerSyncStatus, type WatchlistPeerSyncStatusData } from "./com
 import { tabStateKey, useTabState } from "@/lib/tabState";
 import { tokens } from "@/lib/tokens.generated";
 import { acquireNews, fetchBulkNews, summarizeAcquisition } from "@/lib/portfolioNews";
-import type {
-  CorporateComparisonHistoryPoint,
-  CorporateComparisonHistoryResponse,
-} from "../../../../packages/shared-types";
 import {
   buildPortfolioTickerMetrics,
   metricDisplayTitle,
@@ -73,14 +68,6 @@ const StockDetailModal = dynamic(
   () => import("./components/StockDetailModal").then((mod) => mod.StockDetailModal),
   {
     loading: () => <ModalLoadingOverlay label="Loading stock detail" />,
-    ssr: false,
-  },
-);
-
-const SnapshotHistoryModal = dynamic(
-  () => import("./components/SnapshotHistoryModal").then((mod) => mod.SnapshotHistoryModal),
-  {
-    loading: () => <ModalLoadingOverlay label="Loading saved snapshots" />,
     ssr: false,
   },
 );
@@ -201,14 +188,6 @@ export interface CorporateComparisonResponse {
   rows: CorporateComparisonRow[];
 }
 
-// Defined once in packages/shared-types/portfolio.ts and re-exported here so the existing
-// `from "../page"` importers keep working. Two copies of a contract type drift; this one
-// already had, against the generated interface of the same name.
-export type {
-  CorporateComparisonHistoryPoint,
-  CorporateComparisonHistoryResponse,
-};
-
 interface CorporateComparisonStockHistoryPoint {
   as_of_date: string;
   generated_at: string;
@@ -260,7 +239,6 @@ interface SectorGroup {
 const DESKTOP_MIN = Number.parseFloat(tokens.bp.desktop); // Tailwind lg
 const PORTFOLIO_DATE_FILTERS_STORAGE_KEY = "moneyview.portfolio.dateFilters.v1";
 const PORTFOLIO_COMPARISON_CACHE_KEY = "moneyview.portfolio.comparison-cache.v1";
-const PORTFOLIO_COMPARISON_HISTORY_CACHE_KEY = "moneyview.portfolio.comparison-history-cache.v1";
 const PORTFOLIO_ATTRIBUTION_CACHE_KEY = "moneyview.portfolio.attribution-cache.v1";
 const DEFAULT_TOTAL_INVESTMENT_AMOUNT = 10_000;
 const DEFAULT_TRANSACTION_FEE_RATE = 0.002;
@@ -273,13 +251,6 @@ type CachedCalculation<TSnapshot, TResult> = {
 
 type PortfolioComparisonRequestSnapshot = {
   mode: "snapshot" | "live";
-  comparisonUniverse: PortfolioComparisonUniverse;
-  benchmarkTicker: string;
-  customTickersInput: string;
-  holdingsSignature: string;
-};
-
-type PortfolioComparisonHistoryRequestSnapshot = {
   comparisonUniverse: PortfolioComparisonUniverse;
   benchmarkTicker: string;
   customTickersInput: string;
@@ -741,21 +712,6 @@ function isPortfolioComparisonSnapshotStale(
   );
 }
 
-function isPortfolioComparisonHistorySnapshotStale(
-  requested: PortfolioComparisonHistoryRequestSnapshot | null,
-  current: PortfolioComparisonHistoryRequestSnapshot,
-) {
-  return Boolean(
-    requested
-    && (
-      requested.comparisonUniverse !== current.comparisonUniverse
-      || requested.benchmarkTicker !== current.benchmarkTicker
-      || requested.customTickersInput !== current.customTickersInput
-      || requested.holdingsSignature !== current.holdingsSignature
-    ),
-  );
-}
-
 function isPortfolioAttributionSnapshotStale(
   requested: AttributionRequestSnapshot | null,
   current: AttributionRequestSnapshot,
@@ -770,55 +726,6 @@ function isPortfolioAttributionSnapshotStale(
       || requested.weights.join(",") !== current.weights.join(",")
     ),
   );
-}
-
-function portfolioSnapshotHistoryViewState({
-  comparisonHistoryData,
-  isLoading,
-  isError,
-  recentSnapshotCount,
-}: {
-  comparisonHistoryData: CorporateComparisonHistoryResponse | null | undefined;
-  isLoading: boolean;
-  isError: boolean;
-  recentSnapshotCount: number;
-}) {
-  return {
-    showLoading: isLoading && !comparisonHistoryData,
-    showError: isError && !comparisonHistoryData,
-    showIdle: !comparisonHistoryData && !isLoading && !isError,
-    showEmpty: Boolean(comparisonHistoryData && !isLoading && !isError && recentSnapshotCount === 0),
-    showList: Boolean(comparisonHistoryData && !isLoading && !isError && recentSnapshotCount > 0),
-  };
-}
-
-function portfolioComparisonViewState({
-  activeComparisonData,
-  comparisonData,
-  comparisonIsLoading,
-  comparisonIsError,
-  selectedHistoryPoint,
-  selectedSnapshotIsLoading,
-  selectedSnapshotIsError,
-  hasSnapshotSummary,
-}: {
-  activeComparisonData: CorporateComparisonResponse | null | undefined;
-  comparisonData: CorporateComparisonResponse | null | undefined;
-  comparisonIsLoading: boolean;
-  comparisonIsError: boolean;
-  selectedHistoryPoint: CorporateComparisonHistoryPoint | null;
-  selectedSnapshotIsLoading: boolean;
-  selectedSnapshotIsError: boolean;
-  hasSnapshotSummary: boolean;
-}) {
-  return {
-    showSelectedSnapshotLoading: Boolean(selectedHistoryPoint && selectedSnapshotIsLoading),
-    showSelectedSnapshotError: Boolean(selectedHistoryPoint && selectedSnapshotIsError),
-    showLoading: comparisonIsLoading && !comparisonData,
-    showError: comparisonIsError && !comparisonData,
-    showEmpty: !activeComparisonData && !comparisonIsLoading && !comparisonIsError && !selectedSnapshotIsLoading,
-    showSummary: Boolean(activeComparisonData && hasSnapshotSummary),
-  };
 }
 
 function portfolioAttributionViewState({
@@ -945,8 +852,6 @@ export default function PortfolioPage() {
   const [portfolioComparisonCustomTickersInput, setPortfolioComparisonCustomTickersInput] = useState("NVDA, TSLA");
   const [portfolioComparisonMessage, setPortfolioComparisonMessage] = useState<string | null>(null);
   const [portfolioAnalysisMessage, setPortfolioAnalysisMessage] = useState<string | null>(null);
-  const [snapshotHistoryOpen, setSnapshotHistoryOpen] = useState(false);
-  const [selectedHistoryPoint, setSelectedHistoryPoint] = useState<CorporateComparisonHistoryPoint | null>(null);
   const [applyAllocationToSnapshot, setApplyAllocationToSnapshot] = useState(false);
   const [sectorFilter, setSectorFilter] = useState("All Sectors");
   const [collapsedSectors, setCollapsedSectors] = useState<Record<string, boolean>>({});
@@ -964,9 +869,6 @@ export default function PortfolioPage() {
   const [portfolioComparisonRequestedSnapshot, setPortfolioComparisonRequestedSnapshot] = useState<PortfolioComparisonRequestSnapshot | null>(
     () => readSessionCache<CachedCalculation<PortfolioComparisonRequestSnapshot, CorporateComparisonResponse>>(PORTFOLIO_COMPARISON_CACHE_KEY)?.snapshot ?? null,
   );
-  const [portfolioComparisonHistoryRequestedSnapshot, setPortfolioComparisonHistoryRequestedSnapshot] = useState<PortfolioComparisonHistoryRequestSnapshot | null>(
-    () => readSessionCache<CachedCalculation<PortfolioComparisonHistoryRequestSnapshot, CorporateComparisonHistoryResponse>>(PORTFOLIO_COMPARISON_HISTORY_CACHE_KEY)?.snapshot ?? null,
-  );
   const [portfolioAttributionRequestedSnapshot, setPortfolioAttributionRequestedSnapshot] = useState<AttributionRequestSnapshot | null>(
     () => readSessionCache<CachedCalculation<AttributionRequestSnapshot, AttributionResult>>(PORTFOLIO_ATTRIBUTION_CACHE_KEY)?.snapshot ?? null,
   );
@@ -975,9 +877,6 @@ export default function PortfolioPage() {
   const [savingTotalInvestment, setSavingTotalInvestment] = useState(false);
   const [cachedPortfolioComparisonCalculation] = useState<CachedCalculation<PortfolioComparisonRequestSnapshot, CorporateComparisonResponse> | null>(
     () => readSessionCache<CachedCalculation<PortfolioComparisonRequestSnapshot, CorporateComparisonResponse>>(PORTFOLIO_COMPARISON_CACHE_KEY),
-  );
-  const [cachedPortfolioComparisonHistoryCalculation] = useState<CachedCalculation<PortfolioComparisonHistoryRequestSnapshot, CorporateComparisonHistoryResponse> | null>(
-    () => readSessionCache<CachedCalculation<PortfolioComparisonHistoryRequestSnapshot, CorporateComparisonHistoryResponse>>(PORTFOLIO_COMPARISON_HISTORY_CACHE_KEY),
   );
   const [cachedPortfolioAttributionCalculation] = useState<CachedCalculation<AttributionRequestSnapshot, AttributionResult> | null>(
     () => readSessionCache<CachedCalculation<AttributionRequestSnapshot, AttributionResult>>(PORTFOLIO_ATTRIBUTION_CACHE_KEY),
@@ -1334,12 +1233,6 @@ export default function PortfolioPage() {
     customTickersInput: portfolioComparisonUniverse === "custom" ? debouncedCustomTickersInput : "",
     holdingsSignature,
   }), [debouncedBenchmarkTicker, debouncedCustomTickersInput, holdingsSignature, portfolioComparisonMode, portfolioComparisonUniverse]);
-  const comparisonHistoryCurrentSnapshot = useMemo<PortfolioComparisonHistoryRequestSnapshot>(() => ({
-    comparisonUniverse: portfolioComparisonUniverse,
-    benchmarkTicker: debouncedBenchmarkTicker,
-    customTickersInput: portfolioComparisonUniverse === "custom" ? debouncedCustomTickersInput : "",
-    holdingsSignature,
-  }), [debouncedBenchmarkTicker, debouncedCustomTickersInput, holdingsSignature, portfolioComparisonUniverse]);
   const attributionCurrentSnapshot = useMemo<AttributionRequestSnapshot>(() => ({
     tickers,
     weights,
@@ -1385,48 +1278,6 @@ export default function PortfolioPage() {
         }),
     staleTime: 60_000,
   });
-  const portfolioComparisonHistoryQuery = useQuery<CorporateComparisonHistoryResponse>({
-    queryKey: [
-      "portfolio-comparison-history",
-      portfolioComparisonHistoryRequestedSnapshot?.comparisonUniverse ?? "idle",
-      portfolioComparisonHistoryRequestedSnapshot?.benchmarkTicker ?? "idle",
-      portfolioComparisonHistoryRequestedSnapshot?.customTickersInput ?? "",
-      portfolioComparisonHistoryRequestedSnapshot?.holdingsSignature ?? "idle",
-      portfolioAnalysisRefreshToken ?? "idle",
-    ],
-    enabled: Boolean(hasHoldings && portfolioComparisonHistoryRequestedSnapshot && portfolioAnalysisRefreshToken),
-      queryFn: ({ signal }) =>
-        fetchApi<CorporateComparisonHistoryResponse>("/corporate/comparison/history", {
-          signal,
-          params: {
-            comparison_universe: portfolioComparisonHistoryRequestedSnapshot?.comparisonUniverse ?? "portfolio_plus_benchmark",
-            benchmark_ticker: portfolioComparisonHistoryRequestedSnapshot?.benchmarkTicker ?? DEFAULT_PORTFOLIO_BENCHMARK_TICKER,
-            custom_tickers: portfolioComparisonHistoryRequestedSnapshot?.customTickersInput ?? "",
-            limit: 30,
-          },
-          monitor: {
-            operation: "frontend.query.portfolio_comparison_history",
-            component: "portfolio_page",
-          },
-      }),
-    staleTime: 60_000,
-  });
-  const selectedSnapshotQuery = useQuery<CorporateComparisonResponse>({
-    queryKey: ["portfolio-comparison-snapshot-version", selectedHistoryPoint?.snapshot_version ?? ""],
-    enabled: hasHoldings && portfolioComparisonMode === "snapshot" && Boolean(selectedHistoryPoint?.snapshot_version),
-      queryFn: ({ signal }) =>
-        fetchApi<CorporateComparisonResponse>("/corporate/comparison/snapshot-version", {
-          signal,
-          params: {
-            snapshot_version: selectedHistoryPoint?.snapshot_version ?? "",
-          },
-          monitor: {
-            operation: "frontend.query.portfolio_snapshot_version",
-            component: "portfolio_page",
-          },
-      }),
-    staleTime: 60_000,
-  });
 
   // Attribution uses saved watchlist weights when present, otherwise falls back to equal weight.
   const attributionQuery = useQuery<AttributionResult>({
@@ -1469,10 +1320,6 @@ export default function PortfolioPage() {
     && !isPortfolioComparisonSnapshotStale(cachedPortfolioComparisonCalculation.snapshot, comparisonCurrentSnapshot)
     ? cachedPortfolioComparisonCalculation.result
     : null;
-  const cachedPortfolioComparisonHistory = cachedPortfolioComparisonHistoryCalculation
-    && !isPortfolioComparisonHistorySnapshotStale(cachedPortfolioComparisonHistoryCalculation.snapshot, comparisonHistoryCurrentSnapshot)
-    ? cachedPortfolioComparisonHistoryCalculation.result
-    : null;
   const cachedPortfolioAttribution = cachedPortfolioAttributionCalculation
     && !isPortfolioAttributionSnapshotStale(cachedPortfolioAttributionCalculation.snapshot, attributionCurrentSnapshot)
     ? cachedPortfolioAttributionCalculation.result
@@ -1480,28 +1327,20 @@ export default function PortfolioPage() {
 
   // Chart adapters convert domain attribution data into display-ready allocation/effects datasets.
   const comparisonData = portfolioComparisonQuery.data ?? cachedPortfolioComparison;
-  const comparisonHistoryData = portfolioComparisonHistoryQuery.data ?? cachedPortfolioComparisonHistory;
   const attributionData = attributionQuery.data ?? cachedPortfolioAttribution;
   const allocationData = attributionData ? toAllocationDonutData(attributionData) : [];
   const waterfallData = attributionData ? toAttributionWaterfallData(attributionData) : [];
-  const activeComparisonData = portfolioComparisonMode === "snapshot" && selectedSnapshotQuery.data
-    ? selectedSnapshotQuery.data
-    : comparisonData;
+  const activeComparisonData = comparisonData;
   const activeSnapshotMeta = activeComparisonData?.snapshot ?? null;
-  const recentSnapshotPoints = comparisonHistoryData?.points.slice(0, 3) ?? [];
   const portfolioComparisonCalculating = normalizedBenchmarkTicker !== debouncedBenchmarkTicker
     || (portfolioComparisonUniverse === "custom" && normalizedCustomTickersInput !== debouncedCustomTickersInput)
     || portfolioComparisonQuery.isFetching
-    || portfolioComparisonHistoryQuery.isFetching
-    || attributionQuery.isFetching
-    || selectedSnapshotQuery.isFetching;
+    || attributionQuery.isFetching;
   const portfolioAnalysisDisplayLastUpdatedAt = useMemo(() => {
     const candidates = [
       portfolioComparisonQuery.data ? new Date(portfolioComparisonQuery.dataUpdatedAt).toISOString() : null,
-      portfolioComparisonHistoryQuery.data ? new Date(portfolioComparisonHistoryQuery.dataUpdatedAt).toISOString() : null,
       attributionQuery.data ? new Date(attributionQuery.dataUpdatedAt).toISOString() : null,
       cachedPortfolioComparison ? cachedPortfolioComparisonCalculation?.lastUpdatedAt ?? null : null,
-      cachedPortfolioComparisonHistory ? cachedPortfolioComparisonHistoryCalculation?.lastUpdatedAt ?? null : null,
       cachedPortfolioAttribution ? cachedPortfolioAttributionCalculation?.lastUpdatedAt ?? null : null,
     ].filter((value): value is string => Boolean(value));
     if (candidates.length === 0) return null;
@@ -1513,29 +1352,21 @@ export default function PortfolioPage() {
     cachedPortfolioAttributionCalculation?.lastUpdatedAt,
     cachedPortfolioComparison,
     cachedPortfolioComparisonCalculation?.lastUpdatedAt,
-    cachedPortfolioComparisonHistory,
-    cachedPortfolioComparisonHistoryCalculation?.lastUpdatedAt,
-    portfolioComparisonHistoryQuery.data,
-    portfolioComparisonHistoryQuery.dataUpdatedAt,
     portfolioComparisonQuery.data,
     portfolioComparisonQuery.dataUpdatedAt,
   ]);
   const portfolioComparisonIsStale = isPortfolioComparisonSnapshotStale(portfolioComparisonRequestedSnapshot, comparisonCurrentSnapshot);
-  const portfolioComparisonHistoryIsStale = isPortfolioComparisonHistorySnapshotStale(
-    portfolioComparisonHistoryRequestedSnapshot,
-    comparisonHistoryCurrentSnapshot,
-  );
   const portfolioAttributionIsStale = isPortfolioAttributionSnapshotStale(
     portfolioAttributionRequestedSnapshot,
     attributionCurrentSnapshot,
   );
-  const portfolioAnalysisIsStale = portfolioComparisonIsStale || portfolioComparisonHistoryIsStale || portfolioAttributionIsStale;
+  const portfolioAnalysisIsStale = portfolioComparisonIsStale || portfolioAttributionIsStale;
   const comparisonMetricsByTicker = useMemo<Record<string, PortfolioTickerMetrics>>(() => buildPortfolioTickerMetrics({
     watchlist,
     activeComparisonData: activeComparisonData ?? null,
     comparisonData: comparisonData ?? null,
-    selectedSnapshotData: selectedSnapshotQuery.data,
-    selectedHistoryPointSnapshotVersion: selectedHistoryPoint?.snapshot_version ?? null,
+    selectedSnapshotData: undefined,
+    selectedHistoryPointSnapshotVersion: null,
     portfolioComparisonUniverse,
     portfolioComparisonQueryHasData: Boolean(portfolioComparisonQuery.data),
     activeSnapshotMeta,
@@ -1546,8 +1377,6 @@ export default function PortfolioPage() {
     comparisonData,
     portfolioComparisonQuery.data,
     portfolioComparisonUniverse,
-    selectedHistoryPoint?.snapshot_version,
-    selectedSnapshotQuery.data,
     watchlist,
   ]);
   const allocationRows = useMemo(() => watchlist.map((stock) => {
@@ -1603,54 +1432,6 @@ export default function PortfolioPage() {
     finalProfit: 0,
   }), [allocationRows]);
 
-  const portfolioSnapshotSummary = useMemo(() => {
-    const stockRows = watchlist.map((stock) => comparisonMetricsByTicker[stock.ticker] ?? EMPTY_COMPARISON_METRICS);
-    if (stockRows.length === 0) return null;
-    const flaggedMetricsCount = stockRows.reduce((sum, row) => (
-      sum
-      + (row.impliedVsWacc.quality === "suspicious" || row.impliedVsWacc.quality === "invalid" ? 1 : 0)
-      + (row.roicMinusWacc.quality === "suspicious" || row.roicMinusWacc.quality === "invalid" ? 1 : 0)
-      + (row.dcfUpside.quality === "suspicious" || row.dcfUpside.quality === "invalid" ? 1 : 0)
-    ), 0);
-    // Over holdings that HAVE an implied return: a refused or pre-v3 holding is not one that
-    // fails to beat WACC, and counting its null as "not positive" read as a measured result.
-    const impliedSpreadValues = stockRows
-      .map((row) => metricNumericValue(row.impliedVsWacc))
-      .filter((value): value is number => value != null);
-    const positiveSpreadCount = impliedSpreadValues.filter((value) => value > 0).length;
-    const impliedSpreadCount = impliedSpreadValues.length;
-    const positiveEconomicSpreadCount = stockRows.filter((row) => (metricNumericValue(row.roicMinusWacc) ?? 0) > 0).length;
-    const positiveDcfCount = stockRows.filter((row) => (metricNumericValue(row.dcfUpside) ?? 0) > 0).length;
-    const highestSpreadRow = stockRows
-      .filter((row) => !row.excludedFromRanking && metricNumericValue(row.impliedVsWacc) != null)
-      .sort((left, right) => (metricNumericValue(right.impliedVsWacc) ?? -Infinity) - (metricNumericValue(left.impliedVsWacc) ?? -Infinity))[0] ?? null;
-    return {
-      stockCount: stockRows.length,
-      flaggedMetricsCount,
-      positiveSpreadCount,
-      impliedSpreadCount,
-      positiveEconomicSpreadCount,
-      positiveDcfCount,
-      highestSpreadTicker: highestSpreadRow?.ticker ?? "N/A",
-      highestSpreadValue: highestSpreadRow ? metricNumericValue(highestSpreadRow.impliedVsWacc) : null,
-    };
-  }, [comparisonMetricsByTicker, watchlist]);
-  const snapshotHistoryView = portfolioSnapshotHistoryViewState({
-    comparisonHistoryData,
-    isLoading: portfolioComparisonHistoryQuery.isLoading,
-    isError: portfolioComparisonHistoryQuery.isError,
-    recentSnapshotCount: recentSnapshotPoints.length,
-  });
-  const comparisonView = portfolioComparisonViewState({
-    activeComparisonData,
-    comparisonData,
-    comparisonIsLoading: portfolioComparisonQuery.isLoading,
-    comparisonIsError: portfolioComparisonQuery.isError,
-    selectedHistoryPoint,
-    selectedSnapshotIsLoading: selectedSnapshotQuery.isLoading,
-    selectedSnapshotIsError: selectedSnapshotQuery.isError,
-    hasSnapshotSummary: Boolean(portfolioSnapshotSummary),
-  });
   const attributionView = portfolioAttributionViewState({
     attributionData,
     attributionIsLoading: attributionQuery.isLoading,
@@ -1674,14 +1455,6 @@ export default function PortfolioPage() {
     } satisfies CachedCalculation<PortfolioComparisonRequestSnapshot, CorporateComparisonResponse>);
   }, [effectivePortfolioComparisonSnapshot, portfolioComparisonQuery.data, portfolioComparisonQuery.dataUpdatedAt]);
 
-  useEffect(() => {
-    if (!portfolioComparisonHistoryQuery.data || !portfolioComparisonHistoryRequestedSnapshot) return;
-    writeSessionCache(PORTFOLIO_COMPARISON_HISTORY_CACHE_KEY, {
-      snapshot: portfolioComparisonHistoryRequestedSnapshot,
-      result: portfolioComparisonHistoryQuery.data,
-      lastUpdatedAt: new Date(portfolioComparisonHistoryQuery.dataUpdatedAt).toISOString(),
-    } satisfies CachedCalculation<PortfolioComparisonHistoryRequestSnapshot, CorporateComparisonHistoryResponse>);
-  }, [portfolioComparisonHistoryQuery.data, portfolioComparisonHistoryQuery.dataUpdatedAt, portfolioComparisonHistoryRequestedSnapshot]);
 
   useEffect(() => {
     if (!attributionQuery.data || !portfolioAttributionRequestedSnapshot) return;
@@ -1815,13 +1588,6 @@ export default function PortfolioPage() {
     onError: (error) => {
       setMutationMessage(error instanceof Error ? error.message : "Failed to sync watchlist to JSON.");
     },
-  });
-  const deleteSnapshotMutation = useMutation({
-    mutationFn: async (snapshotVersion: string) =>
-      fetchApi<{ snapshot_version: string; deleted_rows: number }>("/corporate/comparison/snapshot-version", {
-        method: "DELETE",
-        params: { snapshot_version: snapshotVersion },
-      }),
   });
 
   const handleAddHolding = async (event: FormEvent<HTMLFormElement>) => {
@@ -1966,8 +1732,6 @@ export default function PortfolioPage() {
       try {
         const refreshed = await savePortfolioSnapshot();
         await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-summary"] });
-        await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-history"] });
-        setSelectedHistoryPoint(null);
         setPortfolioComparisonMode("snapshot");
         setPortfolioComparisonMessage(`Normalized weights and updated the ${formatDateLabel(refreshed.snapshot.as_of_date)} snapshot.`);
       } catch (error) {
@@ -2047,8 +1811,6 @@ export default function PortfolioPage() {
           try {
             const refreshed = await savePortfolioSnapshot();
             await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-summary"] });
-            await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-history"] });
-            setSelectedHistoryPoint(null);
             setPortfolioComparisonMode("snapshot");
             setPortfolioComparisonMessage(
               `Saved allocation changes and updated the ${formatDateLabel(refreshed.snapshot.as_of_date)} snapshot.`,
@@ -2105,51 +1867,19 @@ export default function PortfolioPage() {
     }
   };
 
-  const handleRefreshPortfolioSnapshot = async () => {
-    setPortfolioComparisonMessage(null);
-    try {
-      const refreshed = await savePortfolioSnapshot();
-      await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-summary"] });
-      await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-history"] });
-      setSelectedHistoryPoint(null);
-      setPortfolioComparisonMode("snapshot");
-      setPortfolioComparisonMessage(`Saved portfolio snapshot for ${formatDateLabel(refreshed.snapshot.as_of_date)}.`);
-    } catch (error) {
-      setPortfolioComparisonMessage(error instanceof Error ? error.message : "Failed to save portfolio snapshot.");
-    }
-  };
-
-  const handleDeleteSnapshotVersion = async (snapshotVersion: string) => {
-    setPortfolioComparisonMessage(null);
-    try {
-      await deleteSnapshotMutation.mutateAsync(snapshotVersion);
-      if (selectedHistoryPoint?.snapshot_version === snapshotVersion) {
-        setSelectedHistoryPoint(null);
-      }
-      await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-history"] });
-      await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-summary"] });
-      await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-snapshot-version", snapshotVersion] });
-      setPortfolioComparisonMessage("Deleted the selected saved snapshot.");
-    } catch (error) {
-      setPortfolioComparisonMessage(error instanceof Error ? error.message : "Failed to delete the saved snapshot.");
-    }
-  };
-
   const handleRefreshPortfolioAnalysis = () => {
     if (!hasHoldings) {
       setPortfolioAnalysisMessage("Add holdings before refreshing portfolio analysis.");
       return;
     }
 
-    setSelectedHistoryPoint(null);
     setPortfolioComparisonRequestedSnapshot(comparisonCurrentSnapshot);
-    setPortfolioComparisonHistoryRequestedSnapshot(comparisonHistoryCurrentSnapshot);
     setPortfolioAttributionRequestedSnapshot(canRunAttribution ? attributionCurrentSnapshot : null);
     setPortfolioAnalysisRefreshToken(`${Date.now()}`);
     setPortfolioAnalysisMessage(
       canRunAttribution
-        ? "Refreshing portfolio comparison, snapshot history, and attribution."
-        : "Refreshing portfolio comparison and snapshot history. Attribution stays paused until saved weights are 100% or below.",
+        ? "Refreshing portfolio comparison and attribution."
+        : "Refreshing portfolio comparison. Attribution stays paused until saved weights are 100% or below.",
     );
   };
 
@@ -2543,22 +2273,6 @@ export default function PortfolioPage() {
           onUpdateTheme={(stock, themeId) => handleUpdateStockTheme(stock, themeId)}
           onRemoveFromWatchlist={(stock) => void handleDeleteHolding(stock)}
           onClose={() => setSelectedStockContext(null)}
-        />
-      )}
-      {snapshotHistoryOpen && (
-        <SnapshotHistoryModal
-          history={comparisonHistoryData ?? undefined}
-          loading={portfolioComparisonHistoryQuery.isLoading && !comparisonHistoryData}
-          error={portfolioComparisonHistoryQuery.isError && !comparisonHistoryData}
-          activeSnapshotVersion={activeSnapshotMeta?.snapshot_version ?? ""}
-          deletingSnapshotVersion={deleteSnapshotMutation.isPending ? deleteSnapshotMutation.variables ?? null : null}
-          onSelectSnapshot={(point) => {
-            setSelectedHistoryPoint(point);
-            setPortfolioComparisonMode("snapshot");
-            setSnapshotHistoryOpen(false);
-          }}
-          onDeleteSnapshot={(point) => void handleDeleteSnapshotVersion(point.snapshot_version)}
-          onClose={() => setSnapshotHistoryOpen(false)}
         />
       )}
     </ErrorBoundary>

@@ -34,7 +34,6 @@ test("the Weights tab shows the allocation editor", async ({ page }) => {
 test("the Attribution tab calculates through its own button", async ({ page }) => {
   const stats: PortfolioPageMockStats = {
     comparisonRequests: 0,
-    comparisonHistoryRequests: 0,
     attributionRequests: 0,
     stockDetailRequests: 0,
     stockSnapshotHistoryRequests: 0,
