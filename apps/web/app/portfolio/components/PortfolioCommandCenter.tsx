@@ -175,7 +175,7 @@ export function PortfolioCommandCenter({
                 checked={addToWatchlistOnly}
                 onChange={(event) => setAddToWatchlistOnly(event.target.checked)}
                 aria-label="Add to Watchlist only"
-                className="mt-0.5"
+                className="mt-0.5 h-6 w-6 shrink-0"
               />
               <span>
                 Add to Watchlist only
@@ -231,7 +231,7 @@ export function PortfolioCommandCenter({
               checked={importJsonArmed}
               onChange={(event) => setImportJsonArmed(event.target.checked)}
               aria-label="Arm destructive JSON import"
-              className="mt-0.5"
+              className="mt-0.5 h-6 w-6 shrink-0"
             />
             <span>I understand Import JSON replaces the DB watchlist from file and can overwrite saved weights.</span>
           </label>

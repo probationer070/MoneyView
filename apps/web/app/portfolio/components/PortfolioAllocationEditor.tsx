@@ -101,6 +101,7 @@ export function PortfolioAllocationEditor({
               checked={applyAllocationToSnapshot}
               onChange={(event) => setApplyAllocationToSnapshot(event.target.checked)}
               aria-label="Apply allocation changes to snapshot"
+              className="h-6 w-6 shrink-0"
             />
             Apply To Snapshot
           </label>
@@ -197,7 +198,7 @@ export function PortfolioAllocationEditor({
                     value={weightDrafts[row.stock.ticker] ?? row.allocationPercent.toFixed(1)}
                     onChange={(event) => handleAllocationDraftChange(row.stock, event.target.value)}
                     aria-label={`${row.stock.ticker} allocation slider`}
-                    className="w-full accent-[var(--brand)]"
+                    className="h-6 w-full accent-[var(--brand)]"
                   />
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums">{formatCurrencyCompact(row.allocatedAmount)}</td>

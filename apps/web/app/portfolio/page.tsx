@@ -37,6 +37,7 @@ import { PortfolioAllocationEditor } from "./components/PortfolioAllocationEdito
 import { AddStockModal } from "./components/AddStockModal";
 import { PortfolioCommandCenter } from "./components/PortfolioCommandCenter";
 import { PortfolioGuide } from "./components/PortfolioGuide";
+import { PeriodControl } from "./components/PeriodControl";
 import { PortfolioShell } from "./components/PortfolioShell";
 import { StockViewToggle, type StocksView } from "./components/StockViewToggle";
 import { resolveGroupFilter, selectVisibleStocks, StockTileGrid, type GridFilter } from "./components/StockTileGrid";
@@ -1932,12 +1933,9 @@ export default function PortfolioPage() {
 
   const benchmarkQuickActions = PORTFOLIO_BENCHMARK_PRESETS.filter((preset) => ["sp500", "kospi", "kosdaq"].includes(preset.id));
 
-  // Panel bodies: the sections that used to stack down the page, moved verbatim into
-  // the rail-triggered side panels. Only the tile grid stays in the scrolling region.
-  const attributionPanelBody = (
-    <>
-      <div className="flex flex-col gap-3 px-4 pt-3">
-        <div className="flex flex-wrap items-end gap-3">
+  // D9: the two dates and the benchmark sit behind one trigger at the right end of the tab row.
+  const periodControl = (
+    <PeriodControl start={holdingStartDate} end={attributionAsOfDate}>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <label className="flex flex-col gap-1 type-small text-[var(--ink-muted)]">
                   <InfoTooltip
@@ -2005,6 +2003,15 @@ export default function PortfolioPage() {
                     <option value="custom">Manual ticker</option>
                   </select>
                 </label>
+    </PeriodControl>
+  );
+
+  // Panel bodies: the sections that used to stack down the page, moved verbatim into
+  // the rail-triggered side panels. Only the tile grid stays in the scrolling region.
+  const attributionPanelBody = (
+    <>
+      <div className="flex flex-col gap-3 px-4 pt-3">
+        <div className="flex flex-wrap items-end gap-3">
           <button
             type="button"
             onClick={handleRefreshPortfolioAnalysis}
@@ -2261,7 +2268,7 @@ export default function PortfolioPage() {
         tabsLabel={t("portfolio.tabs.label")}
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        tabsAside={activeTab === "stocks" ? <StockViewToggle value={stocksView} onChange={setStocksView} /> : null}
+        tabsAside={activeTab === "stocks" ? <StockViewToggle value={stocksView} onChange={setStocksView} /> : activeTab === "attribution" ? periodControl : null}
         panels={{ stocks: stocksPanel, weights: allocationPanelBody, attribution: attributionPanelBody }}
       >
         <div className="px-4 pt-4">

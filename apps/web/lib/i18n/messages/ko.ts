@@ -27,6 +27,7 @@ export const ko: Messages = {
     news: { never: "뉴스 갱신", updated: "뉴스 {minutes}분 전 갱신" },
     subtitle: "관심 종목 {count}개 · 비중 합계 {weight}",
     view: { label: "보기 방식", cards: "카드", table: "표", follow: "관심" },
+    period: { trigger: "기간 {start} ~ {end}", defaultStart: "기본", latest: "최신", dialog: "기간 및 벤치마크" },
     guide: {
       about: {
         title: "이 화면은",

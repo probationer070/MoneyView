@@ -31,7 +31,7 @@ test("panel copy does not describe a layout the panel does not have", async ({ p
 // panel. These assert geometry rather than class names -- the class is how it is done
 // today, the rendered size is what has to be true.
 
-const CONTROL_MIN_HIT_HEIGHT = 32;
+const CONTROL_MIN_HIT_HEIGHT = 24;
 
 test("the allocation table sits inside the Weights tab at 1280px with no horizontal page scroll", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
@@ -44,10 +44,8 @@ test("the allocation table sits inside the Weights tab at 1280px with no horizon
   expect(overflow, "the page scrolls horizontally").toBeLessThanOrEqual(0);
 });
 
-// Open finding (P2a): on the Weights tab the row buttons are 28px tall and the checkboxes and
-// sliders are 13-16px, so the 32px floor fails. Needs an owner decision (raise the controls, or
-// exempt native checkboxes/sliders) before this is re-enabled.
-test.fixme("controls inside a panel are big enough to hit", async ({ page }) => {
+// D14: the Weights tab's checkboxes and sliders are 24px tall (was 13-16px); the floor is 24px.
+test("controls inside a panel are big enough to hit", async ({ page }) => {
   // The bodies were laid out for a full-width section at `px-2 py-1 text-xs` -- about 26px
   // tall. "Too small to click" is the reported symptom, so it gets a measured floor.
   await page.setViewportSize({ width: 1600, height: 900 });

@@ -24,6 +24,7 @@ export const en = {
     news: { never: "Refresh news", updated: "News updated {minutes} min ago" },
     subtitle: "{count} stocks · weights total {weight}",
     view: { label: "View", cards: "Cards", table: "Table", follow: "Follow" },
+    period: { trigger: "Period {start} – {end}", defaultStart: "default", latest: "latest", dialog: "Period and benchmark" },
     guide: {
       about: {
         title: "What this screen is",

@@ -306,6 +306,7 @@ test("weight editing and sync or import controls are visible and actionable", as
 
   // The date inputs moved from the header into the Attribution tab.
   await openPortfolioPanel(page, "attribution");
+  await page.getByRole("button", { name: /^Period/ }).click();
   await page.getByLabel("Holding Start Date").fill("2026-01-15");
   await page.getByLabel("Return End Date").fill("2026-04-10");
   await expect(page.getByLabel("Holding Start Date")).toHaveValue("2026-01-15");
@@ -324,6 +325,7 @@ test("weight editing and sync or import controls are visible and actionable", as
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "Portfolio", exact: true })).toBeVisible({ timeout: 60_000 });
   await openPortfolioPanel(page, "attribution");
+  await page.getByRole("button", { name: /^Period/ }).click();
   await expect(page.getByLabel("Holding Start Date")).toHaveValue("2026-01-15");
   await expect(page.getByLabel("Return End Date")).toHaveValue("2026-04-10");
 
