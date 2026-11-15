@@ -16,12 +16,18 @@ const INTL: Record<FormatLocale, string> = { en: "en-US", ko: "ko-KR" };
 export function formatNumber(
   value: number | null | undefined,
   kind: NumberKind,
-  { digits = DIGITS[kind], signed = false, locale = "en" }: { digits?: number; signed?: boolean; locale?: FormatLocale } = {},
+  { digits = DIGITS[kind], minDigits = digits, maxDigits = digits, signed = false, locale = "en" }: {
+    digits?: number;
+    minDigits?: number;
+    maxDigits?: number;
+    signed?: boolean;
+    locale?: FormatLocale;
+  } = {},
 ): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return MISSING;
   const body = new Intl.NumberFormat(INTL[locale], {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
+    minimumFractionDigits: minDigits,
+    maximumFractionDigits: maxDigits,
     notation: kind === "compact" ? "compact" : "standard",
     signDisplay: signed ? "exceptZero" : "negative",
   }).format(kind === "percent" ? value * 100 : value);

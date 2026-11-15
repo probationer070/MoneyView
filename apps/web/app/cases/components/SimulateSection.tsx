@@ -4,6 +4,7 @@ import { fieldTargets, formatWire, unitSuffix, wireValue } from "../caseFields";
 import { CaseApiError, casesApi } from "../casesApi";
 import { DEFAULT_RUNS, MAX_RUNS, MIN_RUNS, type CaseRecord, type Shape, type SimulateRequest, type SimulateResult } from "../caseTypes";
 import { EMPTY_NARRATIVE, SHAPE_PARAMS, buildSimulateRequest, type SimulateRow } from "../changeRows";
+import { formatNumber } from "@/lib/format";
 import { useT } from "@/lib/i18n/locale";
 import { FieldPicker, controlClass } from "./FieldPicker";
 import { NarrativeInputs } from "./NarrativeInputs";
@@ -128,7 +129,7 @@ export function SimulateSection({ record, pointValue }: { record: CaseRecord; po
             {t("cases.simulate.addInput")}
           </button>
           <label className="flex flex-col gap-1 type-small text-[var(--ink-secondary)]">
-            {t("cases.simulate.runs", { min: MIN_RUNS.toLocaleString("en-US"), max: MAX_RUNS.toLocaleString("en-US") })}
+            {t("cases.simulate.runs", { min: formatNumber(MIN_RUNS, "integer"), max: formatNumber(MAX_RUNS, "integer") })}
             <input
               value={runs}
               onChange={(e) => setRuns(e.target.value)}

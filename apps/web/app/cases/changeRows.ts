@@ -1,4 +1,5 @@
 import type { MessageKey } from "../../lib/i18n/translate";
+import { formatNumber } from "../../lib/format";
 import { englishTr, toWire, type FieldTarget, type Tr } from "./caseFields";
 import type {
   Confidence, DistributionLeaf, ForkLeaf, ForkRequest, Overrides, Shape, SimulateRequest, ThreeP,
@@ -213,7 +214,7 @@ export function buildSimulateRequest(
   const runsProblem =
     Number.isInteger(runs) && runs >= MIN_RUNS && runs <= MAX_RUNS
       ? null
-      : t("cases.problem.runs", { min: MIN_RUNS.toLocaleString("en-US"), max: MAX_RUNS.toLocaleString("en-US") });
+      : t("cases.problem.runs", { min: formatNumber(MIN_RUNS, "integer"), max: formatNumber(MAX_RUNS, "integer") });
   const seedTrimmed = seedText.trim();
   const seed = seedTrimmed === "" ? undefined : Number(seedTrimmed);
   const seedValid = seed !== undefined && Number.isInteger(seed) && seed >= 0 && seed <= Number.MAX_SAFE_INTEGER;

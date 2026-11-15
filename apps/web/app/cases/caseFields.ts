@@ -1,4 +1,5 @@
 import { en, type Messages } from "../../lib/i18n/messages/en";
+import { formatNumber, MISSING } from "../../lib/format";
 import { translate, type MessageKey } from "../../lib/i18n/translate";
 import type { CaseRecord } from "./caseTypes";
 
@@ -78,19 +79,26 @@ export function fromWire(field: FieldMeta, wire: number): number {
   return clean(field.unit === "rate" ? wire * 100 : wire);
 }
 
+// Percent points (7.4 -> "7.40%"): "ratio" kind, not "percent" (which multiplies by 100). A missing
+// value keeps the formatter's marker with no "%" appended.
+function pointsText(points: number, digits: number): string {
+  const text = formatNumber(points, "ratio", { digits });
+  return text === MISSING ? text : `${text}%`;
+}
+
 export function formatWire(field: FieldMeta, wire: number | null | undefined, t: Tr = englishTr): string {
   if (wire === null || wire === undefined) return t("cases.notSet");
   const display = fromWire(field, wire);
-  if (field.unit === "rate") return `${display.toFixed(2)}%`;
+  if (field.unit === "rate") return pointsText(display, 2);
   if (field.integer) return String(display);
-  return display.toLocaleString("en-US", { maximumFractionDigits: 4 });
+  return formatNumber(display, "ratio", { minDigits: 0, maxDigits: 4 });
 }
 
 const PERCENT = meta("percent", "Percent", "rate");
 
 /** A fraction shown as a percentage (0.074 -> "7.40%"). Goes through fromWire, so the ×100 still lives in one place. */
 export function fmtPercent(fraction: number, digits: number): string {
-  return `${fromWire(PERCENT, fraction).toFixed(digits)}%`;
+  return pointsText(fromWire(PERCENT, fraction), digits);
 }
 
 export function unitSuffix(field: FieldMeta): string {

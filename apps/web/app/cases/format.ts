@@ -1,7 +1,7 @@
 import { formatNumber, type FormatLocale } from "@/lib/format";
 
 export function fmtMoney(value: number): string {
-  return value.toLocaleString("en-US", { maximumFractionDigits: 1 });
+  return formatNumber(value, "ratio", { minDigits: 0, maxDigits: 1 });
 }
 
 export function fmtPerShare(value: number, locale: FormatLocale = "en"): string {
@@ -9,5 +9,5 @@ export function fmtPerShare(value: number, locale: FormatLocale = "en"): string 
 }
 
 export function fmtSigned(value: number): string {
-  return `${value >= 0 ? "+" : "−"}${fmtPerShare(Math.abs(value))}`;
+  return `${value >= 0 ? "+" : "-"}${fmtPerShare(Math.abs(value))}`;
 }

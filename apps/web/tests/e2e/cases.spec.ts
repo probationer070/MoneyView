@@ -181,7 +181,7 @@ test.describe("why a fork's value moved", () => {
     await expect(why.getByTestId(/^why-bar-/)).toHaveCount(3);
     await expect(why.getByTestId("why-bar-0")).toContainText("WACC, stable");
     await expect(why.getByTestId("why-bar-0")).toContainText("7.40% → 8.10%");
-    await expect(why.getByTestId("why-bar-0")).toContainText("−6.14");
+    await expect(why.getByTestId("why-bar-0")).toContainText("-6.14");
     await expect(why.getByTestId("why-bar-1")).toContainText("Core · Base margin");
     await expect(why.getByTestId("why-bar-1")).toContainText("20.00% → 22.00%");
     await expect(why.getByTestId("why-bar-2")).toContainText("Core · Margin, target");
@@ -348,7 +348,7 @@ test.describe("uncertainty (simulate this case)", () => {
     await expect(results.getByTestId("simulate-p50")).toHaveText("49.10");
     await expect(results.getByText("among accepted draws").first()).toBeVisible();
     await expect(results.getByTestId("association-0")).toContainText("WACC, stable");
-    await expect(results.getByTestId("association-0")).toContainText("−0.81");
+    await expect(results.getByTestId("association-0")).toContainText("-0.81");
     await expect(results.getByTestId("simulate-histogram")).toBeVisible();
   });
 

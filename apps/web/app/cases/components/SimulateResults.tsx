@@ -5,9 +5,7 @@ import { fmtPercent, labelForInput } from "../caseFields";
 import type { SimulateResult } from "../caseTypes";
 import { formatNumber } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/locale";
-import { fmtPerShare } from "../format";
-
-const signed = (value: number) => `${value >= 0 ? "+" : "−"}${Math.abs(value).toFixed(2)}`;
+import { fmtPerShare, fmtSigned } from "../format";
 
 export function SimulateResults({
   result, pointValue, onRerun, rerunDisabled,
@@ -127,7 +125,7 @@ export function SimulateResults({
               {association.map((a, i) => (
                 <li key={a.input} data-testid={`association-${i}`} className="flex justify-between border-b border-[var(--line)] py-1">
                   <span>{labelForInput(a.input, t)}</span>
-                  <span className="tabular-nums">{a.spearman === null ? t("cases.simulate.notMeasurable") : signed(a.spearman)}</span>
+                  <span className="tabular-nums">{a.spearman === null ? t("cases.simulate.notMeasurable") : fmtSigned(a.spearman)}</span>
                 </li>
               ))}
             </ul>

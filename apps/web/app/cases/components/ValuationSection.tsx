@@ -1,5 +1,6 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import { BilingualLabel } from "@/components/ui/BilingualLabel";
+import { formatNumber } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/locale";
 import { fmtPercent } from "../caseFields";
 import type { RunResult } from "../caseTypes";
@@ -29,7 +30,7 @@ export function ValuationSection({ query }: { query: UseQueryResult<RunResult, u
             <Figure label={t("cases.valuation.valuePerShareBasic")} value={fmtPerShare(run.value_per_share_basic, locale)} testId="value-per-share-basic" />
             <Figure label={t("cases.valuation.enterpriseValue")} value={fmtMoney(run.enterprise_value)} testId="enterprise-value" />
             <Figure label={t("cases.valuation.equityValue")} value={fmtMoney(run.equity_value)} testId="equity-value" />
-            <Figure label={t("cases.valuation.terminalShare")} value={`${run.terminal_value_share_pct.toFixed(1)}%`} testId="terminal-share" />
+            <Figure label={t("cases.valuation.terminalShare")} value={`${formatNumber(run.terminal_value_share_pct, "ratio", { digits: 1 })}%`} testId="terminal-share" />
           </div>
           {run.offering_price !== null && run.offering_implied_value !== null && run.offering_premium_pct !== null && (
             // Damodaran's offer check: the IPO price against the value per share, and the company value the price implies.
@@ -38,10 +39,10 @@ export function ValuationSection({ query }: { query: UseQueryResult<RunResult, u
               <Figure label={t("cases.valuation.companyValueAtOffer")} value={fmtMoney(run.offering_implied_value)} testId="offering-implied-value" />
               <Figure
                 label={t("cases.valuation.offerVsValue")}
-                value={`${run.offering_premium_pct >= 0 ? "+" : "−"}${Math.abs(run.offering_premium_pct).toFixed(1)}%`}
+                value={`${run.offering_premium_pct >= 0 ? "+" : "-"}${formatNumber(Math.abs(run.offering_premium_pct), "ratio", { digits: 1 })}%`}
                 testId="offering-premium"
               />
-              <Figure label={t("cases.valuation.newShares")} value={run.shares_new_effective.toLocaleString("en-US", { maximumFractionDigits: 4 })} testId="shares-new-effective" />
+              <Figure label={t("cases.valuation.newShares")} value={formatNumber(run.shares_new_effective, "ratio", { minDigits: 0, maxDigits: 4 })} testId="shares-new-effective" />
             </div>
           )}
           <div className="mt-4 overflow-x-auto">
