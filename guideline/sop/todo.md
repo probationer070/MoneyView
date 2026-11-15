@@ -76,7 +76,7 @@ Plan: `docs/superpowers/plans/2026-10-12-design-system-formalization.md`.
   - Follow-up B: sector peer data (spec D7/D8), which replaces the Peers tab's universe position.
   - Follow-up N9 residue: M5 numbers, `buildCalculationDetails` prose, bilingual headers on the pre-existing tables.
   - Follow-up N1 input: annual history for debt ratio, reinvestment, beta and innovation, which the backend must supply.
-  - Owner decision pending: the WACC tile shows the slider value while the assumption table shows the audit's "N/A" when the audit is invalid.
+  - Owner decision 2026-11-16 (deferred): when the audit is invalid, both the WACC tile and the assumption table show the slider value with an invalid-basis note. The owner wants this area rebuilt; do it as part of that rebuild, not as a patch.
   - [x] DS Task 14a lint/test rules (new rules at error outside market): `rounded-full` on chips (no check today; Task 12 mutant uncaught), `font-*` without a reason, figures without mono, and no page scroll at 1280×720.
   - The dvh fix (Task 7b, `min-h-dvh`) has not been tested on a real phone; only Chromium at 390×844 is covered.
   - Uppercase table-header consistency, for DS Task 11.

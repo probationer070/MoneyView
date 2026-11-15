@@ -106,6 +106,9 @@ capitals: "종목 NAME". Both come from `apps/web/lib/i18n/labels.ts`; add the r
 | Volume | 거래량 | label (raw price table header) |
 | ROIC - WACC | 투하자본이익률 - WACC | label (table header; ROIC expanded as in the ROIC row, Korean half needs Hangul) |
 | Allocation | 배분 | label (allocation table header) |
+| Selection effect | 선택 효과 | Brinson attribution, portfolio 성과 기여 tab (owner 2026-11-16) |
+| Interaction effect | 상호작용 효과 | Brinson attribution, portfolio 성과 기여 tab (owner 2026-11-16) |
+| Active return | 초과 수익률 | portfolio return minus benchmark return (owner 2026-11-16) |
 | Adjust | 조정 | label (allocation table header) |
 | Invested Amount | 투자 금액 | label (allocation table header) |
 | Projected Net Value | 예상 순자산가치 | label (allocation table header) |
