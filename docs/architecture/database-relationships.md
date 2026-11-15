@@ -126,7 +126,7 @@ Dev-monitor: none (JSONL files). Market events reference `indices` read-only
 
 Details: [`watchlist-cleanup-and-corporate-sync.md`](watchlist-cleanup-and-corporate-sync.md).
 
-### 2.10 Macro Signals (4)
+### 2.10 Macro Signals (4) and market assumptions (1)
 
 | Table | Purpose | PK / unique keys | Class | Rebuildable? | Synced? | Owning module |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -134,6 +134,7 @@ Details: [`watchlist-cleanup-and-corporate-sync.md`](watchlist-cleanup-and-corpo
 | `signal_results` (:226) | Each rule's verdict in a snapshot, with its contribution as computed at run time | PK `(snapshot_id, rule_id)` | derived | same as its snapshot | no | `services/signals/store.py:71-73` (replaced with its snapshot) |
 | `signal_manual_inputs` (:239) | The user's verdict for a manual rule in one week | PK `(rule_id, iso_week)` | record | no | no | `PUT /signals/manual/{rule_id}` (`routes/signals.py:64,70`); `store.py:125` |
 | `fred_cache` (:247) | FRED observations per series and date | PK `(series_id, obs_date)` | cache | yes, from FRED (needs `FRED_API_KEY`) | no | `services/signals/fetch.py:56`; `store.py:132` |
+| `market_assumptions` (db.py, after `fred_cache`) | Owner-entered risk-free fallback, equity risk premium and non-mature CRP, percent points, append-only | PK `(key, as_of)`; CHECK on key and value range | owner record | no (seeded 4.2 / 5.5 / 0.8 at `2026-11-16` by `init_db()`) | no | `services/market_assumptions.py` (`resolve_assumptions`); echoed by `GET /corporate/metrics/{ticker}` as `assumptions` |
 
 Rule definitions are not in SQLite: they are read from `apps/api/services/signals/rules.yaml`.
 

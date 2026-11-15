@@ -79,6 +79,20 @@ export interface CorporateMetricsApi {
   esg_penalty: number;
   growth_meta?: CorporateDerivedMetricMeta | null;
   roic_meta?: CorporateDerivedMetricMeta | null;
+  assumptions?: AssumptionsApi | null;
+  wacc_refusal?: { code: string; missing: string[] } | null;
+}
+
+export interface AssumptionsApi {
+  risk_free_rate: number;
+  risk_free_source: string;
+  risk_free_as_of: string;
+  equity_risk_premium: number;
+  erp_source: string;
+  erp_as_of: string;
+  crp: number;
+  crp_basis: "mature_market_rule" | "non_mature_rule";
+  stale: string[];
 }
 
 export interface CorporateDerivedMetricMeta {

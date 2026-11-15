@@ -53,6 +53,8 @@ from apps.api.services.corporate_dcf import (
     partition_valuable_tickers,
 )
 from apps.api.services.db import get_db
+from apps.api.services.market_assumptions import AssumptionsMissing, resolve_assumptions
+from apps.api.models.schema_parts.corporate import AssumptionsOut, WaccRefusal
 from apps.api.services.corporate_statement_metrics import (
     DEFAULT_EQUITY_RISK_PREMIUM,
     DEFAULT_RISK_FREE_RATE,
@@ -465,6 +467,27 @@ async def stream_dcf_summary(request: Request, ticker: str, params: ValuationAss
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
+def _with_assumptions_echo(metrics: CorporateMetrics) -> CorporateMetrics:
+    """S1: report the resolved market assumptions beside the metrics. Ke/WACC are not touched yet."""
+    with get_db() as conn:
+        resolved = resolve_assumptions(conn, datetime.now(timezone.utc))
+    if isinstance(resolved, AssumptionsMissing):
+        return metrics.model_copy(update={"wacc_refusal": WaccRefusal(code=resolved.code, missing=list(resolved.missing))})
+    mature = metrics.crp == 0
+    echo = AssumptionsOut(
+        risk_free_rate=resolved.risk_free_rate,
+        risk_free_source=resolved.risk_free_source,
+        risk_free_as_of=resolved.risk_free_as_of,
+        equity_risk_premium=resolved.equity_risk_premium,
+        erp_source=resolved.erp_source,
+        erp_as_of=resolved.erp_as_of,
+        crp=0.0 if mature else resolved.crp_non_mature,
+        crp_basis="mature_market_rule" if mature else "non_mature_rule",
+        stale=list(resolved.stale),
+    )
+    return metrics.model_copy(update={"assumptions": echo})
+
+
 @router.get("/metrics/{ticker}", response_model=CorporateMetrics)
 def get_corporate_metrics(
     ticker: str,
@@ -482,13 +505,14 @@ def get_corporate_metrics(
         roic_basis,
         roic_year,
     )
-    return _metrics_for_ticker(
+    metrics = _metrics_for_ticker(
         ticker,
         growth_basis=growth_basis,
         roic_basis=roic_basis,
         growth_year=growth_year,
         roic_year=roic_year,
     )
+    return _with_assumptions_echo(metrics)
 
 
 @router.get("/metrics/{ticker}/audit", response_model=CorporateMetricAudit)

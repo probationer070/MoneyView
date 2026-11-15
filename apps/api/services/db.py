@@ -275,6 +275,21 @@ CREATE TABLE IF NOT EXISTS fred_cache (
     fetched_at    TEXT NOT NULL,
     PRIMARY KEY (series_id, obs_date)
 );
+-- Owner-entered market assumptions (docs/superpowers/plans/2026-11-16-wacc-ke-live-premia.md section 1).
+-- value is in percent points (5.5 = 5.5 %). Append-only: the latest as_of per key wins.
+CREATE TABLE IF NOT EXISTS market_assumptions (
+    key           TEXT NOT NULL CHECK (key IN ('risk_free_fallback','equity_risk_premium','crp_non_mature')),
+    value         REAL NOT NULL,
+    as_of         TEXT NOT NULL,
+    source        TEXT NOT NULL CHECK (length(source) > 0),
+    updated_at    TEXT NOT NULL,
+    PRIMARY KEY (key, as_of),
+    CHECK (
+        (key = 'risk_free_fallback' AND value BETWEEN -0.5 AND 15)
+        OR (key = 'equity_risk_premium' AND value BETWEEN 2 AND 12)
+        OR (key = 'crp_non_mature' AND value BETWEEN 0 AND 10)
+    )
+);
 -- Risk-alert record (docs/superpowers/specs/2026-10-19-risk-engine-design.md section 7).
 -- warnings_json is {"warnings": {id: {state, value, observed_at}}, "on_count": n, "w1_proxy": bool}.
 -- trigger_json (risk_alerts) and payload_json (risk_alert_cards) hold fields section 7 has no column for.
@@ -859,10 +874,28 @@ def init_db() -> None:
                 raise
             logger.info("DB bootstrap detected legacy snapshot tables without universe columns; applying compatibility migrations.")
         _ensure_schema_compatibility(conn)
+        _seed_market_assumptions(conn)
         conn.commit()
         logger.info("DB initialised at %s", _DB_PATH.resolve())
     finally:
         conn.close()
+
+
+_MARKET_ASSUMPTION_SEED = (
+    ("risk_free_fallback", 4.2),
+    ("equity_risk_premium", 5.5),
+    ("crp_non_mature", 0.8),
+)
+
+
+def _seed_market_assumptions(conn: sqlite3.Connection) -> None:
+    """Insert the owner's starting premia. INSERT OR IGNORE on the fixed PK: a repeat run, the second
+    PC, or an owner-edited row is never overwritten."""
+    conn.executemany(
+        "INSERT OR IGNORE INTO market_assumptions (key, value, as_of, source, updated_at) "
+        "VALUES (?, ?, '2026-11-16', 'owner', '2026-11-16T09:00:00Z')",
+        _MARKET_ASSUMPTION_SEED,
+    )
 
 
 def _backfill_news_publisher(conn: sqlite3.Connection) -> None:

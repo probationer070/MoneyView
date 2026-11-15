@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import List
+from typing import List, Literal
 
 from pydantic import BaseModel, Field
 
@@ -221,6 +221,25 @@ class RiskAssumptions(BaseModel):
     simulations: int = Field(..., ge=1000, le=100000)
 
 
+class AssumptionsOut(BaseModel):
+    """The market assumptions a request used, in percent points (plan 2026-11-16-wacc-ke-live-premia)."""
+
+    risk_free_rate: float
+    risk_free_source: str
+    risk_free_as_of: str
+    equity_risk_premium: float
+    erp_source: str
+    erp_as_of: str
+    crp: float
+    crp_basis: Literal["mature_market_rule", "non_mature_rule"]
+    stale: list[str] = []
+
+
+class WaccRefusal(BaseModel):
+    code: str = "assumptions_missing"
+    missing: list[str] = []
+
+
 class CorporateMetrics(BaseModel):
     """Ticker-specific corporate analysis inputs."""
 
@@ -252,6 +271,8 @@ class CorporateMetrics(BaseModel):
     esg_penalty: float = 22.0
     growth_meta: "CorporateDerivedMetricMeta | None" = None
     roic_meta: "CorporateDerivedMetricMeta | None" = None
+    assumptions: AssumptionsOut | None = None
+    wacc_refusal: WaccRefusal | None = None
 
 
 class MetricQuality(str):
