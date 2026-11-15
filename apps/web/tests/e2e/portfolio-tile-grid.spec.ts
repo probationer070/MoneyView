@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { mockPortfolioPageApi } from "./helpers/portfolioPageMock";
 import type { PortfolioStockFixture } from "./fixtures/shared";
 
-const REFRESH_NEWS = "Refresh news for visible stocks";
+const REFRESH_NEWS = /^(Refresh news|News updated \d+ min ago)$/;
 
 /**
  * A watchlist big enough to overflow the scroll region. Weights stay small so the sum

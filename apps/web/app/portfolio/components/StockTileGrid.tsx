@@ -119,11 +119,14 @@ interface StockTileGridProps {
   statusSlot?: ReactNode;
   /** Renders the visible stocks as a table instead of tiles; the filter and search above are shared. */
   renderTable?: (visible: PortfolioStock[]) => ReactNode;
+  /** Opens the Add stock dialog. Renders a dashed card as the last grid cell, or a row under the table. */
+  onAddStock?: () => void;
+  addStockLabel?: string;
 }
 
 export function StockTileGrid({
   stocks, newsByTicker, filter, onFilterChange, search, onSearchChange, onOpenStock,
-  followedGroup, unfollowedGroup, onToggleFollow, statusSlot, renderTable,
+  followedGroup, unfollowedGroup, onToggleFollow, statusSlot, renderTable, onAddStock, addStockLabel,
 }: StockTileGridProps) {
   const groups = useMemo(() => availableGroups(stocks), [stocks]);
 
@@ -182,12 +185,34 @@ export function StockTileGrid({
       </div>
 
       {visible.length === 0 ? (
+        <>
         <EmptyState
           title={stocks.length === 0 ? "No Holdings Yet" : "No stocks in this group"}
           description="Follow a stock with the + on its tile in All, or switch the filter to All."
         />
+        {onAddStock ? (
+          <button
+            type="button"
+            onClick={onAddStock}
+            className="w-full border border-dashed border-[var(--line)] px-3 py-2 type-body text-[var(--ink-muted)] hover:border-[var(--brand)] hover:text-[var(--ink)]"
+          >
+            {addStockLabel}
+          </button>
+        ) : null}
+        </>
       ) : renderTable ? (
-        renderTable(visible)
+        <>
+          {renderTable(visible)}
+          {onAddStock ? (
+            <button
+              type="button"
+              onClick={onAddStock}
+              className="w-full border border-dashed border-[var(--line)] px-3 py-2 type-body text-[var(--ink-muted)] hover:border-[var(--brand)] hover:text-[var(--ink)]"
+            >
+              {addStockLabel}
+            </button>
+          ) : null}
+        </>
       ) : (
         <div
           data-testid="stock-tile-grid"
@@ -209,6 +234,15 @@ export function StockTileGrid({
               onOpen={onOpenStock}
             />
           ))}
+          {onAddStock ? (
+            <button
+              type="button"
+              onClick={onAddStock}
+              className="flex min-h-[8rem] items-center justify-center border border-dashed border-[var(--line)] type-body text-[var(--ink-muted)] hover:border-[var(--brand)] hover:text-[var(--ink)]"
+            >
+              {addStockLabel}
+            </button>
+          ) : null}
         </div>
       )}
     </div>

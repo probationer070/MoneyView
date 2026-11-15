@@ -1,6 +1,6 @@
 "use client";
 
-import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObject } from "react";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef } from "react";
 import { X } from "lucide-react";
 import clsx from "clsx";
@@ -15,6 +15,8 @@ interface ModalShellProps {
   subtitle?: string;
   size?: ModalSize;
   headerRightContent?: ReactNode;
+  /** Element to focus on open instead of the first focusable one (the header close button). */
+  initialFocusRef?: RefObject<HTMLElement | null>;
   children: ReactNode;
 }
 
@@ -26,7 +28,7 @@ const maxWidthMap: Record<ModalSize, string> = {
 };
 
 export function ModalShell({
-  open, onClose, title, subtitle, size = "lg", headerRightContent, children,
+  open, onClose, title, subtitle, size = "lg", headerRightContent, initialFocusRef, children,
 }: ModalShellProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const previouslyFocusedElementRef = useRef<HTMLElement | null>(null);
@@ -71,7 +73,7 @@ export function ModalShell({
       const focusableElements = dialog.querySelectorAll<HTMLElement>(
         'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
       );
-      const firstFocusableElement = focusableElements[0];
+      const firstFocusableElement = initialFocusRef?.current ?? focusableElements[0];
       if (firstFocusableElement) {
         firstFocusableElement.focus();
       } else {
@@ -84,6 +86,8 @@ export function ModalShell({
       document.body.style.overflow = "";
       previouslyFocusedElementRef.current?.focus();
     };
+  // initialFocusRef is read only at open time; it must not re-run the effect.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, handleEscape]);
 
   const handleDialogKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {

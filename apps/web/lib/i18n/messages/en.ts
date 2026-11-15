@@ -20,6 +20,9 @@ export const en = {
   portfolio: {
     title: "Portfolio",
     tabs: { label: "Portfolio views", stocks: "Stocks", weights: "Weights", attribution: "Attribution" },
+    addStock: { title: "Add stock", open: "+ Add stock", search: "Search", placeholder: "Search ticker, name, or sector", add: "+ Add", added: "Already added", empty: "No matching stocks in the company registry." },
+    news: { never: "Refresh news", updated: "News updated {minutes} min ago" },
+    subtitle: "{count} stocks · weights total {weight}",
     view: { label: "View", cards: "Cards", table: "Table", follow: "Follow" },
     guide: {
       about: {

@@ -34,6 +34,7 @@ import { LoadingState, SkeletonCard } from "@/components/ui/LoadingState";
 import { ActionButton } from "@/components/ui/ActionButton";
 import { PortfolioAttributionSummary } from "./components/PortfolioAttributionSummary";
 import { PortfolioAllocationEditor } from "./components/PortfolioAllocationEditor";
+import { AddStockModal } from "./components/AddStockModal";
 import { PortfolioCommandCenter } from "./components/PortfolioCommandCenter";
 import { PortfolioGuide } from "./components/PortfolioGuide";
 import { PortfolioShell } from "./components/PortfolioShell";
@@ -844,6 +845,10 @@ export default function PortfolioPage() {
   const [newName, setNewName] = useState("");
   const [newSector, setNewSector] = useState("");
   const [portfolioBrowserSearch, setPortfolioBrowserSearch] = useState("");
+  const [addStockOpen, setAddStockOpen] = useState(false);
+  const [newsFetchedAt, setNewsFetchedAt] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const autoNewsStartedRef = useRef(false);
   const [addToWatchlistOnly, setAddToWatchlistOnly] = useState(true);
   const [newWeightPercent, setNewWeightPercent] = useState("");
   const [weightDrafts, setWeightDrafts] = useState<Record<string, string>>({});
@@ -1160,12 +1165,27 @@ export default function PortfolioPage() {
     },
     onSuccess: (response) => {
       setRefreshSummary(qualifyRefreshSummary(summarizeAcquisition(response)));
+      setNewsFetchedAt(Date.now());
       void queryClient.invalidateQueries({ queryKey: ["portfolio-news"] });
     },
     onError: (error) => {
       setRefreshSummary(qualifyRefreshSummary(error instanceof Error ? error.message : "Refresh failed"));
     },
   });
+
+  // The first time the Stocks tab has stocks on screen, fetch their news once. The server
+  // reports "fresh" for tickers it already holds, so its staleness rules still apply. The
+  // ref (not state) keeps tab switches and re-renders from starting it again.
+  useEffect(() => {
+    if (activeTab !== "stocks" || visibleTickers.length === 0 || autoNewsStartedRef.current) return;
+    autoNewsStartedRef.current = true;
+    refreshNews.mutate();
+  }, [activeTab, visibleTickers, refreshNews]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const openStockDetail = useCallback((stock: PortfolioStock) => {
     setSelectedStockContext({ ticker: stock.ticker, fallbackStock: stock });
@@ -1621,7 +1641,7 @@ export default function PortfolioPage() {
     });
   };
 
-  const handleAddCandidate = async (company: CorporateCompany) => {
+  const handleAddCandidate = async (company: CorporateCompany, groupName = "browser") => {
     const ticker = company.ticker.trim().toUpperCase();
     if (!ticker || watchlist.some((stock) => stock.ticker === ticker)) return;
     setMutationMessage(null);
@@ -1629,7 +1649,7 @@ export default function PortfolioPage() {
       ticker,
       name: company.name || ticker,
       sector: company.sector ?? "",
-      group_name: "browser",
+      group_name: groupName,
       weight: 0,
     });
     setPortfolioBrowserSearch("");
@@ -2176,10 +2196,12 @@ export default function PortfolioPage() {
               type="button"
               disabled={refreshNews.isPending}
               onClick={() => refreshNews.mutate()}
-              className="inline-flex items-center justify-center gap-2 rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 type-small text-[var(--ink)] hover:border-[var(--brand)]"
+              className="inline-flex items-center justify-center gap-2 rounded-[var(--radius-1)] px-2 py-1 type-small text-[var(--ink-muted)] hover:text-[var(--ink)]"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${refreshNews.isPending ? "animate-spin" : ""}`} />
-              Refresh news for visible stocks
+              {newsFetchedAt === null
+                ? t("portfolio.news.never")
+                : t("portfolio.news.updated", { minutes: formatNumber(Math.max(0, Math.floor((nowMs - newsFetchedAt) / 60_000)), "integer") })}
             </button>
           </div>
         {refreshSummary ? (
@@ -2209,6 +2231,8 @@ export default function PortfolioPage() {
           search={gridSearch}
           onSearchChange={setGridSearch}
           onOpenStock={openStockDetail}
+          onAddStock={() => setAddStockOpen(true)}
+          addStockLabel={t("portfolio.addStock.open")}
           renderTable={stocksView === "table" ? (visible) => (
             <HoldingsTable
               watchlist={visible}
@@ -2245,8 +2269,11 @@ export default function PortfolioPage() {
           <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="flex flex-col self-start">
               <h1 className="type-heading-5 text-[var(--ink)]">{t("portfolio.title")}</h1>
-              <p className="text-[var(--ink-muted)] mt-1">
-                Volatility-first portfolio command center for expected return comparison and investment testing
+              <p data-testid="portfolio-subtitle" className="type-mono text-[var(--ink-muted)] mt-1">
+                {t("portfolio.subtitle", {
+                  count: formatNumber(watchlist.length, "integer"),
+                  weight: formatNumber(totalStoredWeight, "percent", { digits: 1 }),
+                })}
               </p>
             </div>
             <div className="flex flex-col gap-3 lg:items-end">
@@ -2254,6 +2281,17 @@ export default function PortfolioPage() {
             </div>
           </header>
         </div>
+        <AddStockModal
+          open={addStockOpen}
+          onClose={() => setAddStockOpen(false)}
+          search={portfolioBrowserSearch}
+          onSearchChange={setPortfolioBrowserSearch}
+          results={browserSearchResults}
+          watchlistTickers={tickers}
+          onAdd={(company) => void handleAddCandidate(company, FOLLOWED_GROUP)}
+          adding={addWatchlistMutation.isPending}
+          formatSectorLabel={sectorLabel}
+        />
         <div className="px-4 pt-3"><PortfolioGuide /></div>
         {/* Mutation feedback lives in the shell, not in a panel: its writers are spread
             across the holdings panel (Sync, delete), the stock detail modal (sector edit,

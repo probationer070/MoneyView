@@ -23,6 +23,9 @@ export const ko: Messages = {
   portfolio: {
     title: "포트폴리오",
     tabs: { label: "포트폴리오 보기", stocks: "종목", weights: "비중", attribution: "성과 기여" },
+    addStock: { title: "종목 추가", open: "+ 종목 추가", search: "검색", placeholder: "종목 코드, 이름 또는 업종 검색", add: "+ 추가", added: "이미 추가됨", empty: "기업 목록에서 일치하는 종목을 찾지 못했습니다." },
+    news: { never: "뉴스 갱신", updated: "뉴스 {minutes}분 전 갱신" },
+    subtitle: "관심 종목 {count}개 · 비중 합계 {weight}",
     view: { label: "보기 방식", cards: "카드", table: "표", follow: "관심" },
     guide: {
       about: {
