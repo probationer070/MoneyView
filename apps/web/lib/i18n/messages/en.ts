@@ -19,6 +19,7 @@ export const en = {
   delta: { up: "Up", down: "Down", flat: "Unchanged" },
   portfolio: {
     title: "Portfolio",
+    tabs: { label: "Portfolio views", stocks: "Stocks", weights: "Weights", attribution: "Attribution" },
     guide: {
       about: {
         title: "What this screen is",

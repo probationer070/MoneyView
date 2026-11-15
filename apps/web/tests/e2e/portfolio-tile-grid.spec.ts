@@ -2,19 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { mockPortfolioPageApi } from "./helpers/portfolioPageMock";
 import type { PortfolioStockFixture } from "./fixtures/shared";
 
-const RAIL_SNAPSHOT = "Latest snapshot summary";
-const RAIL_ATTRIBUTION = "Attribution";
-const RAIL_ALLOCATION = "Allocation workspace";
-const RAIL_HOLDINGS = "Holdings table";
-const RAIL_REFRESH = "Refresh news for visible stocks";
-
-function rail(page: Page) {
-  return page.getByTestId("portfolio-rail");
-}
-
-function panel(page: Page) {
-  return page.getByTestId("portfolio-side-panel");
-}
+const REFRESH_NEWS = "Refresh news for visible stocks";
 
 /**
  * A watchlist big enough to overflow the scroll region. Weights stay small so the sum
@@ -76,32 +64,7 @@ test("the grid scroll region is the only vertically scrolling region on the page
   expect(documentOverflow).toBe(0);
 });
 
-test("a rail icon opens its panel and Escape closes it", async ({ page }) => {
-  await mockPortfolioPageApi(page);
-  await gotoGrid(page);
-
-  await rail(page).getByRole("button", { name: RAIL_SNAPSHOT }).click();
-  await expect(panel(page)).toBeVisible();
-  await expect(panel(page)).toHaveAttribute("aria-modal", "true");
-  await expect(panel(page)).toHaveAttribute("aria-label", "Latest Snapshot Summary");
-
-  await page.keyboard.press("Escape");
-  await expect(panel(page)).toHaveCount(0);
-});
-
-test("only one panel is open at a time", async ({ page }) => {
-  await mockPortfolioPageApi(page);
-  await gotoGrid(page);
-
-  await rail(page).getByRole("button", { name: RAIL_SNAPSHOT }).click();
-  await expect(panel(page)).toBeVisible();
-  await rail(page).getByRole("button", { name: RAIL_ATTRIBUTION }).click();
-
-  await expect(panel(page)).toHaveCount(1);
-  await expect(panel(page)).toHaveAttribute("aria-label", "Attribution");
-});
-
-test("opening a panel performs no fetch", async ({ page }) => {
+test("switching tabs performs no fetch", async ({ page }) => {
   await mockPortfolioPageApi(page);
   await gotoGrid(page);
   // Let first-load queries finish before the counter starts; otherwise their responses
@@ -114,41 +77,15 @@ test("opening a panel performs no fetch", async ({ page }) => {
     if (pathname.startsWith("/api/v1/")) requested.push(pathname);
   });
 
-  for (const label of [RAIL_SNAPSHOT, RAIL_ATTRIBUTION, RAIL_ALLOCATION, RAIL_HOLDINGS]) {
-    await rail(page).getByRole("button", { name: label }).click();
-    await expect(panel(page)).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(panel(page)).toHaveCount(0);
+  for (const label of ["Attribution", "Weights", "Stocks"]) {
+    await page.getByRole("tab", { name: label }).click();
+    await expect(page.getByRole("tab", { name: label })).toHaveAttribute("aria-selected", "true");
   }
 
   // A panel body renders from props that are already in the cache, so no request may be
   // issued by opening one. Give any that would be issued a window to appear.
   await page.waitForTimeout(1_000);
   expect(requested).toEqual([]);
-});
-
-test("a panel opened with the grid scrolled to the bottom is pinned to the visible region", async ({ page }) => {
-  await mockPortfolioPageApi(page, undefined, { watchlist: bulkWatchlist(24, 0.04) });
-  await gotoGrid(page, "TST1");
-
-  const region = page.getByTestId("portfolio-scroll-region");
-  await region.evaluate((element) => {
-    element.scrollTop = element.scrollHeight;
-  });
-  const scrolled = await region.evaluate((element) => element.scrollTop);
-  expect(scrolled).toBeGreaterThan(0);
-
-  await rail(page).getByRole("button", { name: RAIL_ATTRIBUTION }).click();
-  await expect(panel(page)).toBeVisible();
-
-  const panelBox = await panel(page).boundingBox();
-  const regionBox = await region.boundingBox();
-  expect(panelBox).not.toBeNull();
-  expect(regionBox).not.toBeNull();
-  // Laid out against the whole scrollable content box the panel would start thousands of
-  // pixels above the viewport; against the visible region it lines up with it.
-  expect(Math.abs(panelBox!.y - regionBox!.y)).toBeLessThanOrEqual(2);
-  expect(Math.abs((panelBox!.y + panelBox!.height) - (regionBox!.y + regionBox!.height))).toBeLessThanOrEqual(2);
 });
 
 test("an empty tile says whether it was ever checked", async ({ page }) => {
@@ -295,7 +232,7 @@ test("a ticker with no priced bar renders a dash everywhere, and crashes nothing
   // The API reports an absent price as null rather than 0. The tile always handled that,
   // but the holdings row called `.toLocaleString()` on the value directly, which throws on
   // null -- and page.tsx typed the field as `number`, so the compiler believed the lie and
-  // never flagged it. Both the grid and the holdings panel are checked here.
+  // never flagged it. The grid is checked here; the holdings table is gone with its panel.
   const crashes: string[] = [];
   page.on("pageerror", (error) => crashes.push(error.message));
 
@@ -316,10 +253,6 @@ test("a ticker with no priced bar renders a dash everywhere, and crashes nothing
   await gotoGrid(page, "NULLP");
 
   await expect(page.getByTestId("stock-tile-NULLP")).toContainText("—");
-
-  await rail(page).getByRole("button", { name: RAIL_HOLDINGS }).click();
-  await expect(panel(page)).toBeVisible();
-  await expect(panel(page).getByText("NULLP")).toBeVisible();
 
   expect(crashes, `uncaught page errors: ${crashes.join(" | ")}`).toEqual([]);
 });
@@ -537,7 +470,7 @@ test("refresh reports refreshed, current and named failures", async ({ page }) =
   await mockPortfolioPageApi(page);
   await gotoGrid(page);
 
-  await rail(page).getByRole("button", { name: RAIL_REFRESH }).click();
+  await page.getByRole("button", { name: REFRESH_NEWS }).click();
 
   const summary = page.getByTestId("news-refresh-summary");
   // AAPL acquired; MSFT fresh plus NVDA and AMZN empty, all "already current"; GOOGL failed.
@@ -548,11 +481,11 @@ test("refresh reports refreshed, current and named failures", async ({ page }) =
   await expect(summary).not.toContainText("for the stocks visible when you pressed Refresh");
 });
 
-test("the rail refresh icon spins while acquiring and the summary clears when the search moves", async ({ page }) => {
+test("the refresh button spins while acquiring and the summary clears when the search moves", async ({ page }) => {
   await mockPortfolioPageApi(page, undefined, { acquireDelayMs: 1_500 });
   await gotoGrid(page);
 
-  const refreshButton = rail(page).getByRole("button", { name: RAIL_REFRESH });
+  const refreshButton = page.getByRole("button", { name: REFRESH_NEWS });
   await refreshButton.click();
   await expect(refreshButton.locator("svg.animate-spin")).toBeVisible();
 
@@ -570,7 +503,7 @@ test("a summary that lands after the search moved says which set it describes", 
   await mockPortfolioPageApi(page, undefined, { acquireDelayMs: 2_000 });
   await gotoGrid(page);
 
-  await rail(page).getByRole("button", { name: RAIL_REFRESH }).click();
+  await page.getByRole("button", { name: REFRESH_NEWS }).click();
   // Move the search while the crawl is still in flight.
   await page.getByTestId("grid-search").fill("AAPL");
   await expect(page.getByTestId("stock-tile-MSFT")).toHaveCount(0);
@@ -581,40 +514,7 @@ test("a summary that lands after the search moved says which set it describes", 
   await expect(summary).toContainText("1 failed (GOOGL)");
 });
 
-test("the holdings panel Add button opens the allocation panel and scrolls inside it", async ({ page }) => {
-  await mockPortfolioPageApi(page);
-  await page.addInitScript(() => {
-    const targets: Element[] = [];
-    (window as unknown as { __scrollIntoViewTargets: Element[] }).__scrollIntoViewTargets = targets;
-    const original = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = function patched(this: Element, arg?: boolean | ScrollIntoViewOptions) {
-      targets.push(this);
-      original.call(this, arg as ScrollIntoViewOptions);
-    };
-  });
-  await gotoGrid(page);
-
-  await rail(page).getByRole("button", { name: RAIL_HOLDINGS }).click();
-  await expect(panel(page)).toHaveAttribute("aria-label", "Watchlist Holdings");
-
-  await panel(page).getByRole("button", { name: "Add", exact: true }).click();
-  await expect(panel(page)).toHaveAttribute("aria-label", "Portfolio Allocation Workspace");
-
-  // The scroll target has to live inside the panel that just opened. Before the fix the
-  // ref pointed at a section that no longer existed, so the call was a guaranteed no-op.
-  await expect
-    .poll(async () =>
-      page.evaluate(() => {
-        const openPanel = document.querySelector('[data-testid="portfolio-side-panel"]');
-        if (!openPanel) return false;
-        const targets = (window as unknown as { __scrollIntoViewTargets: Element[] }).__scrollIntoViewTargets;
-        return targets.some((target) => openPanel.contains(target));
-      }),
-    )
-    .toBe(true);
-});
-
-test("add to portfolio from the stock detail modal focuses the weight input inside the allocation panel", async ({ page }) => {
+test("add to portfolio from the stock detail modal focuses the weight input on the Weights tab", async ({ page }) => {
   await mockPortfolioPageApi(page);
   await gotoGrid(page);
 
@@ -623,7 +523,7 @@ test("add to portfolio from the stock detail modal focuses the weight input insi
   await expect(modal).toBeVisible();
   await modal.getByRole("button", { name: /Review Portfolio Weight|Add To Portfolio/ }).click();
 
-  await expect(panel(page)).toHaveAttribute("aria-label", "Portfolio Allocation Workspace");
+  await expect(page.getByRole("tab", { name: "Weights" })).toHaveAttribute("aria-selected", "true");
 
   // The focus is deferred one animation frame on purpose, so read it until it settles
   // rather than once.
@@ -631,7 +531,7 @@ test("add to portfolio from the stock detail modal focuses the weight input insi
     .poll(async () =>
       page.evaluate(() => {
         const active = document.activeElement as HTMLElement | null;
-        const openPanel = document.querySelector('[data-testid="portfolio-side-panel"]');
+        const openPanel = document.querySelector('[role="tabpanel"]');
         return {
           tag: active?.tagName ?? null,
           type: active?.getAttribute("type") ?? null,
@@ -643,7 +543,7 @@ test("add to portfolio from the stock detail modal focuses the weight input insi
     .toEqual({ tag: "INPUT", type: "number", insidePanel: true, rowTicker: "AAPL" });
 });
 
-test("the mutation message survives closing every panel and renders exactly once", async ({ page }) => {
+test("the mutation message survives switching every tab and renders exactly once", async ({ page }) => {
   await mockPortfolioPageApi(page);
   await gotoGrid(page);
 
@@ -656,56 +556,13 @@ test("the mutation message survives closing every panel and renders exactly once
   await expect(message).toHaveCount(1);
   await expect(message).toContainText("AAPL");
 
-  // Add To Portfolio left the allocation panel open; start from a closed shell.
-  await page.keyboard.press("Escape");
-  await expect(panel(page)).toHaveCount(0);
-
-  // The message is written from three different panels but lives in the shell, so closing
-  // and reopening panels must neither drop it nor duplicate it.
-  for (const label of [RAIL_ALLOCATION, RAIL_SNAPSHOT, RAIL_HOLDINGS, RAIL_ATTRIBUTION]) {
-    await rail(page).getByRole("button", { name: label }).click();
-    await expect(panel(page)).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(panel(page)).toHaveCount(0);
+  // The message is written from several tabs but lives in the shell, so switching
+  // tabs must neither drop it nor duplicate it.
+  for (const label of ["Stocks", "Attribution", "Weights"]) {
+    await page.getByRole("tab", { name: label }).click();
     await expect(message).toHaveCount(1);
   }
 
   await expect(message).toBeVisible();
 });
 
-test("the holdings panel header stays on top and clickable while the card body scrolls under it", async ({ page }) => {
-  await mockPortfolioPageApi(page, undefined, { watchlist: bulkWatchlist(24, 0.04) });
-  await gotoGrid(page, "TST1");
-
-  await rail(page).getByRole("button", { name: RAIL_HOLDINGS }).click();
-  await expect(panel(page)).toBeVisible();
-
-  const close = panel(page).getByRole("button", { name: "Close panel" });
-  await panel(page).evaluate((element) => {
-    element.scrollTop += 600;
-  });
-  expect(await panel(page).evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
-
-  // The header is sticky at the top of the panel. A tile's z-10 controls must not paint over it.
-  const box = await close.boundingBox();
-  expect(box).not.toBeNull();
-  const hitIsButton = await close.evaluate(
-    (node, point) => node.contains(document.elementFromPoint(point.x, point.y)),
-    { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 },
-  );
-  expect(hitIsButton, "the element at the Close button's centre must be the Close button").toBe(true);
-
-  // The Close button sits right of the last tile column, so tiles never pass under it; the title
-  // sits over the first column, where a scrolled tile (positioned, later in the DOM) painted over it.
-  const title = panel(page).getByRole("heading", { level: 2 });
-  const titleBox = await title.boundingBox();
-  expect(titleBox).not.toBeNull();
-  const hitIsTitle = await title.evaluate(
-    (node, point) => node.contains(document.elementFromPoint(point.x, point.y)),
-    { x: titleBox!.x + titleBox!.width / 2, y: titleBox!.y + titleBox!.height / 2 },
-  );
-  expect(hitIsTitle, "a scrolled tile must not paint over the panel title").toBe(true);
-
-  await close.click({ timeout: 5_000 });
-  await expect(panel(page)).toHaveCount(0);
-});

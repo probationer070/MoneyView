@@ -22,6 +22,7 @@ export const ko: Messages = {
   delta: { up: "상승", down: "하락", flat: "보합" },
   portfolio: {
     title: "포트폴리오",
+    tabs: { label: "포트폴리오 보기", stocks: "종목", weights: "비중", attribution: "성과 기여" },
     guide: {
       about: {
         title: "이 화면은",

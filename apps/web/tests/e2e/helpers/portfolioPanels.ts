@@ -1,50 +1,33 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
 /**
- * The portfolio page moved its stacked sections behind a rail of icon buttons, so a spec
- * that wants one of those sections has to open its panel first. Rail label on the left,
- * the panel's accessible name on the right.
+ * The portfolio page is a set of page tabs (Stocks / Weights / Attribution). A spec that
+ * wants the allocation workspace or the attribution charts opens its tab first. Panel id
+ * on the left, the tab's accessible name on the right.
  */
-const PANELS = {
-  snapshot: { rail: "Latest snapshot summary", title: "Latest Snapshot Summary" },
-  attribution: { rail: "Attribution", title: "Attribution" },
-  allocation: { rail: "Allocation workspace", title: "Portfolio Allocation Workspace" },
-  holdings: { rail: "Holdings table", title: "Watchlist Holdings" },
+const TABS = {
+  allocation: "Weights",
+  attribution: "Attribution",
+  holdings: "Stocks",
 } as const;
 
-export type PortfolioPanelId = keyof typeof PANELS;
+export type PortfolioPanelId = "snapshot" | keyof typeof TABS;
 
-export function portfolioRail(page: Page) {
-  return page.getByTestId("portfolio-rail");
-}
-
-export function portfolioPanel(page: Page) {
-  return page.getByTestId("portfolio-side-panel");
-}
-
-/**
- * The stock detail and snapshot history modals. SidePanel is also `role="dialog"`, so a
- * bare `getByRole("dialog")` is ambiguous whenever a panel happens to be open.
- */
+/** The stock detail modal and any other dialog the page opens. */
 export function portfolioModal(page: Page): Locator {
-  return page.locator('[role="dialog"]:not([data-testid="portfolio-side-panel"])');
+  return page.getByRole("dialog");
 }
 
-/** Opens `id`, closing whatever else is open. A no-op when it is already the open panel. */
+/** Selects the tab that carries `id` and returns the tab panel. A no-op when it is already selected. */
 export async function openPortfolioPanel(page: Page, id: PortfolioPanelId) {
-  const panel = portfolioPanel(page);
-  if ((await panel.count()) > 0) {
-    if ((await panel.getAttribute("aria-label")) === PANELS[id].title) return panel;
-    // The rail button toggles, so close through the rail rather than Escape: Escape is a
-    // document listener and would also close any modal the spec has deliberately opened.
-    const openTitle = await panel.getAttribute("aria-label");
-    const openId = (Object.keys(PANELS) as PortfolioPanelId[]).find((key) => PANELS[key].title === openTitle);
-    if (openId) {
-      await portfolioRail(page).getByRole("button", { name: PANELS[openId].rail }).click();
-      await expect(panel).toHaveCount(0);
-    }
+  if (id === "snapshot") {
+    throw new Error('The snapshot panel was removed from /portfolio; there is nothing to open for "snapshot".');
   }
-  await portfolioRail(page).getByRole("button", { name: PANELS[id].rail }).click();
-  await expect(panel).toHaveAttribute("aria-label", PANELS[id].title);
-  return panel;
+  if (id === "holdings") {
+    throw new Error('The holdings panel was removed from /portfolio; the Stocks tab replaces it (a table view arrives with the Stocks tab redesign).');
+  }
+  const tab = page.getByRole("tab", { name: TABS[id], exact: true });
+  await tab.click();
+  await expect(tab).toHaveAttribute("aria-selected", "true");
+  return page.getByRole("tabpanel");
 }

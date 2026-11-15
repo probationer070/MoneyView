@@ -986,10 +986,10 @@ export default function PortfolioPage() {
   const totalInvestmentAutoSaveInFlightRef = useRef(false);
   const allocationSectionRef = useRef<HTMLElement | null>(null);
   const weightInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
-  // Which rail panel is open. Owned here rather than inside PortfolioShell so page actions
-  // can open a panel programmatically, not just a rail click. setOpenPanel is referentially
-  // stable, which is what keeps SidePanel's Escape listener from re-registering.
-  const [openPanel, setOpenPanel] = useState<string | null>(null);
+  // Which page tab is showing. Owned here rather than inside PortfolioShell so page actions
+  // can switch tabs programmatically, not just on a click. Restored per session like the grid filter.
+  const [storedTab, setActiveTab] = useTabState<string>(tabStateKey("portfolio", "tab"), "stocks");
+  const activeTab = ["stocks", "weights", "attribution"].includes(storedTab) ? storedTab : "stocks";
   // A pending scroll/focus request against the allocation panel. SidePanel renders null
   // while closed, so allocationSectionRef and weightInputRefs are null until the panel has
   // mounted -- a requestAnimationFrame issued in the same tick as the open would still find
@@ -1005,13 +1005,13 @@ export default function PortfolioPage() {
     // the panel it just opened, and its focus trap would pull focus straight back off the
     // weight input. No-op when nothing is selected, as from the holdings toolbar.
     setSelectedStockContext(null);
-    setOpenPanel("allocation");
+    setActiveTab("weights");
     // The weight input is only rendered while its row is in edit mode (same gate the
     // double-click path uses), so without this the focus below would still have nothing
     // to land on.
     if (ticker) setEditingAllocationTicker(ticker);
     setAllocationFocusRequest((current) => ({ ticker, token: (current?.token ?? 0) + 1 }));
-  }, []);
+  }, [setActiveTab]);
 
   useEffect(() => {
     if (!allocationFocusRequest) return;
@@ -2178,49 +2178,39 @@ export default function PortfolioPage() {
 
   // Panel bodies: the sections that used to stack down the page, moved verbatim into
   // the rail-triggered side panels. Only the tile grid stays in the scrolling region.
-  const snapshotPanelBody = (
+  const attributionPanelBody = (
     <>
-      {/* Every branch below is gated on hasHoldings, so with an empty watchlist this
-          body rendered nothing at all and the panel opened as a titled slide-over over
-          blank space -- indistinguishable from a panel that failed to load. */}
-      {!hasHoldings && (
-        <p data-testid="panel-empty-state" className="type-body text-[var(--ink-muted)]">
-          No snapshot yet. Add at least one stock to the watchlist, then press Save Current As Snapshot to start a daily record.
-        </p>
-      )}
-      {hasHoldings && (
-        <section className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
-          {/* Always stacked: the panel is a fixed 45rem, so a viewport breakpoint (it was
-              min-[1450px]:flex-row) squeezed this text into a narrow column and pushed the
-              buttons past the panel edge on wide windows. */}
-          <div className="flex flex-col gap-4">
-            <div>
-              {/* No heading here: SidePanel renders the panel title, and its tooltip
-                  carries the description this block used to duplicate. */}
-              <p className="type-body text-[var(--ink-muted)]">
-                Snapshot mode is the default daily record. Live mode lets you inspect the current portfolio-side comparison without replacing the saved daily snapshot.
-              </p>
-            </div>
-            <div className="flex flex-col gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="flex items-center gap-2 type-small text-[var(--ink-muted)]">
+      <div className="flex flex-col gap-3 px-4 pt-3">
+        <div className="flex flex-wrap items-end gap-3">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <label className="flex flex-col gap-1 type-small text-[var(--ink-muted)]">
                   <InfoTooltip
-                    label="Universe"
-                    description="Portfolio + Benchmark uses the tracked holdings already on this page. Custom Universe keeps the same benchmark but lets you compare only the manual ticker list you provide, without rewriting the watchlist."
+                    label="Holding Start Date"
+                    description="Sets the starting point for return, attribution, and beta calculations. Use the date the stock was added or the position was first held; this prevents multi-year winners from showing inflated returns when the actual holding period is shorter."
                   />
-                  <select
-                    aria-label="Portfolio comparison universe"
-                    value={portfolioComparisonUniverse}
-                    onChange={(event) => {
-                      setSelectedHistoryPoint(null);
-                      setPortfolioComparisonUniverse(event.target.value as PortfolioComparisonUniverse);
-                    }}
-                    className="rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-small text-[var(--ink)]"
-                  >
-                    <option value="portfolio_plus_benchmark">Portfolio + Benchmark</option>
-                    <option value="custom">Custom Universe</option>
-                  </select>
+                  <input
+                    type="date"
+                    value={holdingStartDate}
+                    onChange={(event) => setHoldingStartDate(event.target.value)}
+                    max={attributionAsOfDate || new Date().toISOString().slice(0, 10)}
+                    className="rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-body text-[var(--ink)]"
+                  />
                 </label>
+                <label className="flex flex-col gap-1 type-small text-[var(--ink-muted)]">
+                  <InfoTooltip
+                    label="Return End Date"
+                    description="Sets the ending date for return, attribution, and beta calculations. Leave blank to use the latest available cached market date."
+                  />
+                  <input
+                    type="date"
+                    value={attributionAsOfDate}
+                    onChange={(event) => setAttributionAsOfDate(event.target.value)}
+                    min={holdingStartDate || undefined}
+                    max={new Date().toISOString().slice(0, 10)}
+                    className="rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-body text-[var(--ink)]"
+                  />
+                </label>
+              </div>
                 <label className="flex items-center gap-2 type-small text-[var(--ink-muted)]">
                   <InfoTooltip
                     label="Benchmark"
@@ -2230,7 +2220,6 @@ export default function PortfolioPage() {
                     aria-label="Portfolio benchmark ticker"
                     value={portfolioComparisonBenchmarkTicker}
                     onChange={(event) => {
-                      setSelectedHistoryPoint(null);
                       setPortfolioComparisonBenchmarkTicker(event.target.value.toUpperCase());
                     }}
                     className="w-24 rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-small text-[var(--ink)]"
@@ -2247,7 +2236,6 @@ export default function PortfolioPage() {
                     onChange={(event) => {
                       const selectedPreset = PORTFOLIO_BENCHMARK_PRESETS.find((preset) => preset.id === event.target.value);
                       if (selectedPreset) {
-                        setSelectedHistoryPoint(null);
                         setPortfolioComparisonBenchmarkTicker(selectedPreset.ticker);
                       }
                     }}
@@ -2261,280 +2249,17 @@ export default function PortfolioPage() {
                     <option value="custom">Manual ticker</option>
                   </select>
                 </label>
-                {portfolioComparisonUniverse === "custom" && (
-                  <label className="flex items-center gap-2 type-small text-[var(--ink-muted)]">
-                    <InfoTooltip
-                      label="Custom tickers"
-                      description="Comma-separated tickers for the temporary comparison universe. These affect the comparison rows and saved snapshot payload only; they do not add holdings to the tracked watchlist."
-                    />
-                    <input
-                      aria-label="Portfolio custom tickers"
-                      value={portfolioComparisonCustomTickersInput}
-                      onChange={(event) => {
-                        setSelectedHistoryPoint(null);
-                        setPortfolioComparisonCustomTickersInput(event.target.value.toUpperCase());
-                      }}
-                      placeholder="NVDA, TSLA"
-                      className="w-48 rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-small text-[var(--ink)]"
-                    />
-                  </label>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center gap-2 type-small text-[var(--ink-muted)]">
-                {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold">Quick change</span>
-                {benchmarkQuickActions.map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedHistoryPoint(null);
-                      setPortfolioComparisonBenchmarkTicker(preset.ticker);
-                    }}
-                    className={`rounded-[var(--radius-1)] type-small border px-3 py-1 ${normalizedBenchmarkTicker === preset.ticker ? "border-[var(--brand)] bg-[var(--surface)] text-[var(--ink)]" : "border-[var(--line)] text-[var(--ink-muted)] hover:text-[var(--ink)]"}`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-                {portfolioComparisonCalculating && (
-                  <span className="rounded-[var(--radius-2)] type-small border border-[var(--status-warning-border)] bg-[var(--status-warning-surface)] px-3 py-1 text-[var(--status-warning-ink)]">
-                    Calculating
-                  </span>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="flex items-center gap-2 type-small text-[var(--ink-muted)]">
-                  <InfoTooltip
-                    label="Source"
-                    description="Persisted snapshot shows the latest saved daily record. Live calculation recomputes the comparison with the current controls and holdings but does not replace saved history until you explicitly use Save Current As Snapshot."
-                  />
-                  <select
-                    aria-label="Portfolio comparison source"
-                    value={portfolioComparisonMode}
-                    onChange={(event) => {
-                      const nextMode = event.target.value as "snapshot" | "live";
-                      if (nextMode !== "snapshot") {
-                        setSelectedHistoryPoint(null);
-                      }
-                      setPortfolioComparisonMode(nextMode);
-                    }}
-                    className="rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-small text-[var(--ink)]"
-                  >
-                    <option value="snapshot">Persisted snapshot</option>
-                    <option value="live">Live calculation</option>
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  onClick={handleRefreshPortfolioAnalysis}
-                  className="inline-flex items-center justify-center gap-2 rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 type-small text-[var(--ink)] hover:border-[var(--brand)]"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${portfolioComparisonCalculating ? "animate-spin" : ""}`} />
-                  Refresh Analysis
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleRefreshPortfolioSnapshot()}
-                  className="inline-flex items-center justify-center rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--brand)] px-3 py-2 type-small text-[var(--on-brand)] hover:border-[var(--brand)]"
-                >
-                  Save Current As Snapshot
-                </button>
-                <button
-                  type="button"
-                  onClick={() => router.push("/corporate")}
-                  className="inline-flex items-center justify-center rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 type-small text-[var(--ink-muted)] hover:text-[var(--ink)]"
-                >
-                  View Full Comparison
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-3 flex flex-col gap-2 border border-[var(--line)] bg-[var(--surface-raised)] p-4 type-body text-[var(--ink-muted)] sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-col gap-1">
-              <span>{portfolioAnalysisDisplayLastUpdatedAt ? `Last updated ${formatSyncTimestamp(portfolioAnalysisDisplayLastUpdatedAt)}` : "Latest saved comparison snapshot loads automatically when holdings exist."}</span>
-              {portfolioAnalysisMessage && <span>{portfolioAnalysisMessage}</span>}
-            </div>
-            {portfolioAnalysisIsStale && (
-              <span className="inline-flex items-center rounded-[var(--radius-2)] bg-[var(--status-warning-surface)] px-3 py-1 type-small text-[var(--status-warning-ink)]">
-                Showing stale analysis for prior inputs
-              </span>
-            )}
-          </div>
-
-          <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-3">
-            <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-body text-[var(--ink-muted)]">
-              {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">Universe:</span> {portfolioComparisonUniverseHelpText(portfolioComparisonUniverse)}
-            </div>
-            <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-body text-[var(--ink-muted)]">
-              {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">Benchmark workflow:</span> Preset is currently {benchmarkPresetLabelForTicker(normalizedBenchmarkTicker)}. Manual ticker input stays available for index symbols or ETFs outside the preset list.
-            </div>
-            <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-body text-[var(--ink-muted)]">
-              {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">Snapshot workflow:</span> Live mode is review-only. Saved history updates only when you press {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">Save Current As Snapshot</span> or opt in from the allocation panel.
-            </div>
-          </div>
-          <div className="mt-3 border border-[var(--line)] bg-[var(--surface-raised)] p-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h3 className="type-panel-title text-[var(--ink)]">Saved Snapshot List</h3>
-                <p className="mt-1 type-small text-[var(--ink-muted)]">
-                  Review the most recent persisted portfolio comparison snapshots directly from the page, then open the full history modal when you need the full timeline.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSnapshotHistoryOpen(true)}
-                className="inline-flex items-center justify-center rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 type-small text-[var(--ink-muted)] hover:text-[var(--ink)]"
-              >
-                View All Saved Snapshots
-              </button>
-            </div>
-            {snapshotHistoryView.showLoading && (
-              <div className="mt-3 border border-[var(--line)] bg-[var(--surface-raised)]">
-                <LoadingState variant="spinner" label="Loading saved snapshots..." />
-              </div>
-            )}
-            {snapshotHistoryView.showError && (
-              <div className="mt-3">
-                <StatusPanel
-                  title="Saved Snapshot List Unavailable"
-                  message="Could not load the saved snapshot list for this benchmark and universe."
-                  tone="warning"
-                />
-              </div>
-            )}
-            {snapshotHistoryView.showIdle && (
-              <div className="mt-3 border border-dashed border-[var(--line)] bg-[var(--surface)]">
-                <EmptyState
-                  title="Saved snapshot history stays idle until you refresh portfolio analysis."
-                  description="Refresh portfolio analysis to load the latest persisted snapshot versions for this review context."
-                />
-              </div>
-            )}
-            {snapshotHistoryView.showEmpty && (
-              <div className="mt-3 border border-dashed border-[var(--line)] bg-[var(--surface)]">
-                <EmptyState
-                  title="No saved snapshots are available yet"
-                  description="No saved snapshots are available yet for the current review context."
-                />
-              </div>
-            )}
-            {snapshotHistoryView.showList && (
-              <div className="mt-3 space-y-2">
-                {recentSnapshotPoints.map((point) => {
-                  const isActive = point.snapshot_version === (selectedHistoryPoint?.snapshot_version ?? activeSnapshotMeta?.snapshot_version ?? "");
-                  return (
-                    <div
-                      key={`snapshot-list-${point.snapshot_version}`}
-                      className={`flex flex-col gap-2 border p-3 type-body sm:flex-row sm:items-center sm:justify-between ${
-                        isActive ? "border-[var(--brand)] bg-[var(--surface)]" : "border-[var(--line)] bg-[var(--surface-raised)]"
-                      }`}
-                    >
-                      <div className="space-y-1">
-                        {/* M2: snapshot title; the weight separates the title from its details */}<p className="type-body font-semibold text-[var(--ink)]">
-                          {formatDateLabel(point.as_of_date)} - {point.snapshot_source}
-                        </p>
-                        <p className="type-small text-[var(--ink-muted)]">
-                          Benchmark {point.benchmark_ticker}. Stocks summarized: {point.stock_count}.
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedHistoryPoint(point);
-                            setPortfolioComparisonMode("snapshot");
-                          }}
-                          className={`inline-flex items-center justify-center rounded-[var(--radius-1)] border px-3 py-2 type-small ${
-                            isActive
-                              ? "border-[var(--brand)] bg-[var(--surface)] text-[var(--ink)]"
-                              : "border-[var(--line)] text-[var(--ink-muted)] hover:text-[var(--ink)]"
-                          }`}
-                        >
-                          {isActive ? "Selected Snapshot" : "Review Snapshot"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleDeleteSnapshotVersion(point.snapshot_version)}
-                          disabled={deleteSnapshotMutation.isPending && deleteSnapshotMutation.variables === point.snapshot_version}
-                          className="inline-flex items-center justify-center rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 type-small text-[var(--ink-muted)] hover:text-[var(--down)] disabled:opacity-50"
-                        >
-                          {deleteSnapshotMutation.isPending && deleteSnapshotMutation.variables === point.snapshot_version ? "Removing..." : "Remove Snapshot"}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {comparisonView.showSelectedSnapshotLoading && selectedHistoryPoint && (
-            <div className="mt-3 border border-[var(--line)] bg-[var(--surface-raised)]">
-              <LoadingState
-                variant="spinner"
-                label={`Loading selected snapshot for ${formatDateLabel(selectedHistoryPoint.as_of_date)}...`}
-              />
-            </div>
-          )}
-          {comparisonView.showSelectedSnapshotError && (
-            <div className="mt-3">
-              <StatusPanel
-                title="Selected Snapshot Unavailable"
-                message="Could not load the selected saved snapshot version. Clearing the history selection will return to the latest snapshot."
-                tone="warning"
-              />
-            </div>
-          )}
-
-          {comparisonView.showLoading && (
-            <div className="mt-4 border border-[var(--line)] bg-[var(--surface-raised)]">
-              <LoadingState variant="spinner" label="Loading portfolio snapshot summary..." />
-            </div>
-          )}
-
-          {comparisonView.showError && (
-            <div className="mt-4">
-              <StatusPanel
-                title="Portfolio Snapshot Summary Unavailable"
-                message="Could not load the latest portfolio comparison snapshot."
-                tone="warning"
-              />
-            </div>
-          )}
-
-          {comparisonView.showEmpty && (
-            <div className="mt-4 border border-dashed border-[var(--line)] bg-[var(--surface)]">
-              <EmptyState
-                title="Portfolio comparison is unavailable."
-                description="No latest saved snapshot or cached comparison result is available for the current holdings yet. Use `Refresh Analysis` to request a fresh comparison run."
-              />
-            </div>
-          )}
-
-          {comparisonView.showSummary && activeComparisonData && portfolioSnapshotSummary && (
-            <>
-              <PortfolioSnapshotSummary
-                activeComparisonData={activeComparisonData}
-                portfolioSnapshotSummary={portfolioSnapshotSummary}
-                selectedHistoryPoint={selectedHistoryPoint}
-                setSelectedHistoryPoint={setSelectedHistoryPoint}
-                formatDateLabel={formatDateLabel}
-                portfolioComparisonUniverseLabel={portfolioComparisonUniverseLabel}
-                metricToneClass={metricToneClass}
-                formatMetricPercent={formatMetricPercent}
-                formatSyncTimestamp={formatSyncTimestamp}
-                router={router}
-                setSnapshotHistoryOpen={setSnapshotHistoryOpen}
-              />
-            </>
-          )}
-        </section>
-      )}
-    </>
-  );
-
-  const attributionPanelBody = (
-    <>
+          <button
+            type="button"
+            onClick={handleRefreshPortfolioAnalysis}
+            className="inline-flex items-center justify-center gap-2 rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 type-small text-[var(--ink)] hover:border-[var(--brand)]"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${portfolioComparisonCalculating ? "animate-spin" : ""}`} />
+            Refresh Analysis
+          </button>
+        </div>
+        {portfolioAnalysisMessage && <span className="type-small text-[var(--ink-muted)]">{portfolioAnalysisMessage}</span>}
+      </div>
       {/* Attribution loading state: skeleton KPI cards and chart panels while results calculate. */}
       {attributionView.showLoading && (
         <>
@@ -2707,293 +2432,20 @@ export default function PortfolioPage() {
     </>
   );
 
-  const holdingsPanelBody = (
-    <>
-      {watchlistView.showError && (
-        <StatusPanel
-          title="Portfolio Data Unavailable"
-          message="Could not load watchlist from backend. Verify backend connectivity and retry."
-          tone="warning"
-        />
-      )}
 
-      {watchlistView.showEmpty && (
-        <StatusPanel
-          title="No Holdings Yet"
-          message="Add at least one asset to the tracking watchlist, then assign portfolio weights in the allocation panel when you want attribution insights."
-        />
-      )}
-      {/* Holdings toolbar: section title, explanatory tooltip, and card/table view toggle. */}
-      <section className="flex items-center justify-between gap-4">
-        <div>
-          {/* Heading and tooltip are the panel header's, not this body's. */}
-          <p className="type-body text-[var(--ink-muted)]">
-            Tracking list for holdings and price or news drill-down. Weighting, implied cash, snapshots, and attribution each have their own panel on the rail.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <ViewToggle value={holdingsView} onChange={setHoldingsView} />
-          <ActionButton
-            label="Add"
-            size="sm"
-            onClick={() => requestAllocationFocus(null)}
-          />
-          <ActionButton
-            label={syncWatchlistMutation.isPending ? "Syncing..." : "Sync"}
-            size="sm"
-            loading={syncWatchlistMutation.isPending}
-            onClick={() => {
-              setMutationMessage(null);
-              void syncWatchlistMutation.mutateAsync();
-            }}
-          />
-        </div>
-      </section>
-      {watchlistView.showSectorFilter && (
-        <section className="flex flex-col gap-3 border border-[var(--line)] bg-[var(--surface-raised)] p-4">
-          <div className="flex flex-col gap-1">
-            <h3 className="type-panel-title text-[var(--ink)]">Sector Filter</h3>
-            <p className="type-body text-[var(--ink-muted)]">
-              Group holdings by sector in both views. Use this to isolate volatility clusters quickly, then reset to all sectors when you want the full holdings surface back.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
+      const stocksPanel = (
+        <>
+          <div className="flex items-center justify-end px-4 pt-3">
             <button
               type="button"
-              onClick={() => setSectorFilter("All Sectors")}
-              className={`rounded-[var(--radius-1)] border px-3 py-1.5 type-small ${activeSectorFilter === "All Sectors" ? "border-[var(--brand)] bg-[var(--surface)] text-[var(--ink)]" : "border-[var(--line)] text-[var(--ink-muted)] hover:text-[var(--ink)]"}`}
+              disabled={refreshNews.isPending}
+              onClick={() => refreshNews.mutate()}
+              className="inline-flex items-center justify-center gap-2 rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 type-small text-[var(--ink)] hover:border-[var(--brand)]"
             >
-              All Sectors
+              <RefreshCw className={`h-3.5 w-3.5 ${refreshNews.isPending ? "animate-spin" : ""}`} />
+              Refresh news for visible stocks
             </button>
-            {availableSectors.map((sector) => (
-              <button
-                key={sector}
-                type="button"
-                onClick={() => setSectorFilter(sector)}
-                className={`rounded-[var(--radius-1)] border px-3 py-1.5 type-small ${activeSectorFilter === sector ? "border-[var(--brand)] bg-[var(--surface)] text-[var(--ink)]" : "border-[var(--line)] text-[var(--ink-muted)] hover:text-[var(--ink)]"}`}
-              >
-                {sector}
-              </button>
-            ))}
           </div>
-        </section>
-      )}
-      {/* Holdings body: skeleton, card grid, table, or empty state depending on data and view mode. */}
-      {watchlistView.showSkeleton ? (
-        <WatchlistSkeletonGrid />
-      ) : watchlistView.showChartCards ? (
-        <section className="space-y-4">
-          {watchlistSectorGroups.map((group) => (
-            <div key={group.sector} className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
-              <div className="mb-4">
-                <h3 className="type-panel-title text-[var(--ink)]">{group.sector}</h3>
-                <p className="type-small text-[var(--ink-muted)]">{group.holdings.length} holding{group.holdings.length === 1 ? "" : "s"}</p>
-              </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6">
-                {group.holdings.map((stock) => {
-                  const deltaPct = stock.delta?.delta_pct ?? 0;
-                  return (
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => setSelectedStockContext({ ticker: stock.ticker, fallbackStock: stock })}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          setSelectedStockContext({ ticker: stock.ticker, fallbackStock: stock });
-                        }
-                      }}
-                      key={stock.ticker}
-                      className="group relative block bg-[var(--surface-raised)] border border-[var(--line)] p-4 text-left transition-all hover:border-[var(--brand)]"
-                    >
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void handleDeleteHolding(stock);
-                        }}
-                        disabled={deleteWatchlistMutation.isPending && deleteWatchlistMutation.variables === stock.ticker}
-                        className="absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-2 py-1 type-small text-[var(--ink-muted)] opacity-0 transition-opacity hover:text-[var(--down)] group-hover:opacity-100 group-focus-within:opacity-100 disabled:opacity-50"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        {deleteWatchlistMutation.isPending && deleteWatchlistMutation.variables === stock.ticker ? "Removing" : "Remove"}
-                      </button>
-                      <div className="flex flex-col justify-between items-start mb-2">
-                        <StockIdentity stock={stock} />
-                        <div className="text-right flex flex-row justify-between items-end gap-4">
-                          <div className="type-mono ">
-                            {/* A dash, never a stand-in 0 -- the same convention the tile
-                                uses. This called .toLocaleString() on the value directly,
-                                which throws once the API reports an absent price as null. */}
-                            {stock.last_close === null
-                              ? "—"
-                              : `${formatNumber(stock.last_close, "price", { digits: 1 })}$`}
-                          </div>
-                          <DeltaBadge value={deltaPct} className="mt-1" />
-                          <p className="sr-only">{portfolioStatus("change", deltaPct)}</p>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 pt-2 border-t border-[var(--grid)]">
-                        <Sparkline
-                          data={stock.sparkline}
-                          height={30}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </section>
-      ) : watchlistView.showTableGroups ? (
-        <section className="space-y-4">
-          {watchlistSectorGroups.map((group) => {
-            const isCollapsed = collapsedSectors[group.sector] ?? false;
-            return (
-              <div key={group.sector} className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
-                <button
-                  type="button"
-                  onClick={() => setCollapsedSectors((current) => ({ ...current, [group.sector]: !isCollapsed }))}
-                  className="flex w-full items-center justify-between gap-3 text-left"
-                >
-                  <div>
-                    <h3 className="type-panel-title text-[var(--ink)]">{group.sector}</h3>
-                    <p className="type-small text-[var(--ink-muted)]">{group.holdings.length} holding{group.holdings.length === 1 ? "" : "s"}</p>
-                  </div>
-                  {isCollapsed ? <ChevronRight className="h-4 w-4 text-[var(--ink-muted)]" /> : <ChevronDown className="h-4 w-4 text-[var(--ink-muted)]" />}
-                </button>
-                {!isCollapsed && (
-                  <div className="mt-4">
-                    <HoldingsTable
-                      watchlist={group.holdings}
-                      comparisonMetricsByTicker={comparisonMetricsByTicker}
-                      onSelect={(stock) => setSelectedStockContext({ ticker: stock.ticker, fallbackStock: stock })}
-                      onDelete={(stock) => void handleDeleteHolding(stock)}
-                      deletingTicker={deleteWatchlistMutation.isPending ? deleteWatchlistMutation.variables ?? null : null}
-                    />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </section>
-      ) : null}
-    </>
-  );
-
-  return (
-    <ErrorBoundary
-      fallbackTitle="Portfolio Command Center Failure"
-      fallbackMessage="Portfolio attribution UI failed to render safely."
-    >
-      <PortfolioShell
-        rail={[
-          { id: "snapshot", icon: <Camera className="h-4 w-4" />, label: "Latest snapshot summary" },
-          { id: "attribution", icon: <PieChart className="h-4 w-4" />, label: "Attribution" },
-          { id: "allocation", icon: <SlidersHorizontal className="h-4 w-4" />, label: "Allocation workspace" },
-          { id: "holdings", icon: <TableIcon className="h-4 w-4" />, label: "Holdings table" },
-          {
-            id: "refresh-news",
-            icon: <RefreshCw className={`h-4 w-4 ${refreshNews.isPending ? "animate-spin" : ""}`} />,
-            label: "Refresh news for visible stocks",
-          },
-        ]}
-        onRailAction={(id) => {
-          if (id !== "refresh-news") return false;
-          if (!refreshNews.isPending) refreshNews.mutate();
-          return true;
-        }}
-        openPanel={openPanel}
-        onOpenPanelChange={setOpenPanel}
-        panels={{
-          snapshot: {
-            title: "Latest Snapshot Summary",
-            // Figures and prose, no wide table.
-            width: "wide",
-            description: "Daily comparison snapshot summary for the selected portfolio-side universe. This keeps the latest persisted stock-comparison record visible on the Portfolio page and points you back to the per-stock table for the meaningful comparison metrics.",
-            body: snapshotPanelBody,
-          },
-          // A waterfall chart and a short table; the narrowest of the four.
-          attribution: { title: "Attribution", width: "narrow", body: attributionPanelBody },
-          allocation: {
-            // PortfolioAllocationEditor's table is min-w-[1120px]: at 480px its weight
-            // inputs, save state and sliders were off-screen behind a horizontal scroll.
-            width: "widest",
-            title: "Portfolio Allocation Workspace",
-            description: "Add names from the holdings panel, then set each weight here. Slider moves and double-click manual edits save automatically, and the total investment amount drives the money-based summaries in this panel.",
-            body: allocationPanelBody,
-          },
-          holdings: {
-            // The holdings table is min-w-[760px] and fits this panel at lg without horizontal scroll.
-            width: "widest",
-            title: "Watchlist Holdings",
-            description: "This section is the tracking watchlist: holdings, current close, day-over-day percentage change, and a recent price sparkline. Good/bad follows local convention: red indicates price gain, blue indicates price loss.",
-            body: holdingsPanelBody,
-          },
-        }}
-      >
-        <div className="px-4 pt-4">
-          {/* Header: page identity plus attribution date range and export controls. */}
-          <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="flex flex-col self-start">
-              <h1 className="type-heading-5 text-[var(--ink)]">{t("portfolio.title")}</h1>
-              <p className="text-[var(--ink-muted)] mt-1">
-                Volatility-first portfolio command center for expected return comparison and investment testing
-              </p>
-            </div>
-            <div className="flex flex-col gap-3 lg:items-end">
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <label className="flex flex-col gap-1 type-small text-[var(--ink-muted)]">
-                  <InfoTooltip
-                    label="Holding Start Date"
-                    description="Sets the starting point for return, attribution, and beta calculations. Use the date the stock was added or the position was first held; this prevents multi-year winners from showing inflated returns when the actual holding period is shorter."
-                  />
-                  <input
-                    type="date"
-                    value={holdingStartDate}
-                    onChange={(event) => setHoldingStartDate(event.target.value)}
-                    max={attributionAsOfDate || new Date().toISOString().slice(0, 10)}
-                    className="rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-body text-[var(--ink)]"
-                  />
-                </label>
-                <label className="flex flex-col gap-1 type-small text-[var(--ink-muted)]">
-                  <InfoTooltip
-                    label="Return End Date"
-                    description="Sets the ending date for return, attribution, and beta calculations. Leave blank to use the latest available cached market date."
-                  />
-                  <input
-                    type="date"
-                    value={attributionAsOfDate}
-                    onChange={(event) => setAttributionAsOfDate(event.target.value)}
-                    min={holdingStartDate || undefined}
-                    max={new Date().toISOString().slice(0, 10)}
-                    className="rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-body text-[var(--ink)]"
-                  />
-                </label>
-              </div>
-              <ExportButton tickers={tickers} weights={weights} benchmark={debouncedBenchmarkTicker} period="5y" currency="USD" dateFrom={holdingStartDate} asOfDate={attributionAsOfDate} />
-            </div>
-          </header>
-        </div>
-        <div className="px-4 pt-3"><PortfolioGuide /></div>
-        {/* Mutation feedback lives in the shell, not in a panel: its writers are spread
-            across the holdings panel (Sync, delete), the stock detail modal (sector edit,
-            add to portfolio) and the allocation panel, and only one panel mounts at a time. */}
-        {mutationMessage ? (
-          <p data-testid="portfolio-mutation-message" className="px-4 pt-3 type-body text-[var(--ink-muted)]">
-            {mutationMessage}
-          </p>
-        ) : null}
-        {/* Same reason: normalize-weights and save-allocation both write this from the
-            allocation panel, but it used to render only inside the snapshot panel, so
-            "Failed to update the snapshot after saving allocation changes." was never seen. */}
-        {portfolioComparisonMessage ? (
-          <p data-testid="portfolio-comparison-message" className="px-4 pt-3 type-body text-[var(--ink-muted)]">
-            {portfolioComparisonMessage}
-          </p>
-        ) : null}
         {refreshSummary ? (
           <p data-testid="news-refresh-summary" className="px-4 pt-3 type-small text-[var(--ink-muted)]">
             {refreshSummary}
@@ -3023,6 +2475,56 @@ export default function PortfolioPage() {
           onOpenStock={openStockDetail}
           statusSlot={<WatchlistPeerSyncStatus status={peerSyncQuery.data} />}
         />
+        </>
+      );
+
+  return (
+    <ErrorBoundary
+      fallbackTitle="Portfolio Command Center Failure"
+      fallbackMessage="Portfolio attribution UI failed to render safely."
+    >
+      <PortfolioShell
+        tabs={[
+          { key: "stocks", label: t("portfolio.tabs.stocks") },
+          { key: "weights", label: t("portfolio.tabs.weights") },
+          { key: "attribution", label: t("portfolio.tabs.attribution") },
+        ]}
+        tabsLabel={t("portfolio.tabs.label")}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        panels={{ stocks: stocksPanel, weights: allocationPanelBody, attribution: attributionPanelBody }}
+      >
+        <div className="px-4 pt-4">
+          {/* Header: page identity and export. The attribution dates live in the Attribution tab. */}
+          <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="flex flex-col self-start">
+              <h1 className="type-heading-5 text-[var(--ink)]">{t("portfolio.title")}</h1>
+              <p className="text-[var(--ink-muted)] mt-1">
+                Volatility-first portfolio command center for expected return comparison and investment testing
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 lg:items-end">
+              <ExportButton tickers={tickers} weights={weights} benchmark={debouncedBenchmarkTicker} period="5y" currency="USD" dateFrom={holdingStartDate} asOfDate={attributionAsOfDate} />
+            </div>
+          </header>
+        </div>
+        <div className="px-4 pt-3"><PortfolioGuide /></div>
+        {/* Mutation feedback lives in the shell, not in a panel: its writers are spread
+            across the holdings panel (Sync, delete), the stock detail modal (sector edit,
+            add to portfolio) and the allocation panel, and only one panel mounts at a time. */}
+        {mutationMessage ? (
+          <p data-testid="portfolio-mutation-message" className="px-4 pt-3 type-body text-[var(--ink-muted)]">
+            {mutationMessage}
+          </p>
+        ) : null}
+        {/* Same reason: normalize-weights and save-allocation both write this from the
+            allocation panel, but it used to render only inside the snapshot panel, so
+            "Failed to update the snapshot after saving allocation changes." was never seen. */}
+        {portfolioComparisonMessage ? (
+          <p data-testid="portfolio-comparison-message" className="px-4 pt-3 type-body text-[var(--ink-muted)]">
+            {portfolioComparisonMessage}
+          </p>
+        ) : null}
       </PortfolioShell>
       {/* Stock detail modal renders on demand when a holding is selected. */}
       {selectedStock && (
