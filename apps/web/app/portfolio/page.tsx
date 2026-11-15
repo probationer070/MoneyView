@@ -560,8 +560,8 @@ function normalizeWeightsToOne(weights: PortfolioStock[]) {
   }));
 }
 
-function formatSyncTimestamp(value: string) {
-  if (!value) return "No explicit sync/import yet";
+function formatSyncTimestamp(value: string, t: Tr = englishTr) {
+  if (!value) return t("portfolio.noSyncYet");
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleString();
@@ -1649,7 +1649,7 @@ export default function PortfolioPage() {
             setImportJsonArmed={setImportJsonArmed}
             importUnavailableReason={peerSyncQuery.data?.enabled ? "Import is unavailable while watchlist sync is on." : null}
             syncStatus={syncStatusQuery.data}
-            formatSyncTimestamp={formatSyncTimestamp}
+            formatSyncTimestamp={(value) => formatSyncTimestamp(value, t)}
             formatSectorLabel={sectorLabel}
           />
 

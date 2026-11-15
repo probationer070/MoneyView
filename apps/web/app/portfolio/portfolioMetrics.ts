@@ -64,12 +64,14 @@ function buildNumericMetric(
     suspiciousReason,
     stale,
     estimated = false,
+    t = englishTr,
   }: {
     sourceMode: PortfolioMetricSourceMode;
     missingReason: string;
     suspiciousReason: string;
     stale: boolean;
     estimated?: boolean;
+    t?: Tr;
   },
 ): PortfolioMetricValue {
   if (value == null || !Number.isFinite(value)) {
@@ -89,10 +91,10 @@ function buildNumericMetric(
     quality: stale ? "stale" : estimated ? "estimated" : "ok",
     reason: stale
       ? sourceMode === "cached"
-        ? "Using cached comparison metrics while fresher data is unavailable."
-        : "Using the latest available stale comparison snapshot."
+        ? t("portfolio.metricReason.staleCached")
+        : t("portfolio.metricReason.staleSnapshot")
       : estimated
-        ? "Estimated from local sparkline history rather than comparison API output."
+        ? t("portfolio.metricReason.estimatedSparkline")
         : undefined,
   };
 }
@@ -115,16 +117,16 @@ export function buildPortfolioDisplayMetric(
   });
 }
 
-function unavailableReasonForSource(sourceMode: PortfolioMetricSourceMode) {
+function unavailableReasonForSource(sourceMode: PortfolioMetricSourceMode, t: Tr = englishTr) {
   switch (sourceMode) {
     case "snapshot":
-      return "No latest comparison snapshot for this ticker.";
+      return t("portfolio.metricReason.noSnapshot");
     case "live":
-      return "Latest live comparison unavailable for this ticker.";
+      return t("portfolio.metricReason.liveUnavailable");
     case "cached":
-      return "No cached comparison result for this ticker.";
+      return t("portfolio.metricReason.noCached");
     default:
-      return "No portfolio comparison data has been loaded yet.";
+      return t("portfolio.metricReason.noComparisonLoaded");
   }
 }
 
@@ -195,34 +197,36 @@ export function buildPortfolioTickerMetrics(args: {
     if (stale) {
       warnings.push(
         sourceMode === "cached"
-          ? "Using cached comparison metrics while fresher data is unavailable."
-          : "Using the latest available stale comparison snapshot.",
+          ? t("portfolio.metricReason.staleCached")
+          : t("portfolio.metricReason.staleSnapshot"),
       );
     }
     if (!row && args.portfolioComparisonUniverse === "custom") {
-      warnings.push("Ticker is excluded from the current custom comparison universe.");
+      warnings.push(t("portfolio.metricReason.excludedCustom"));
     }
 
     const missingComparisonReason = !row && args.portfolioComparisonUniverse === "custom"
-      ? "Ticker is excluded from the current custom comparison universe."
-      : unavailableReasonForSource(sourceMode);
+      ? t("portfolio.metricReason.excludedCustom")
+      : unavailableReasonForSource(sourceMode, t);
     const volatilityEstimate = args.estimateVolatilityFromSparkline(stock.sparkline ?? []);
     const metrics: PortfolioTickerMetrics = {
       ticker: stock.ticker,
       roicMinusWacc: row
         ? buildNumericMetric(row.roic_minus_wacc, {
           sourceMode,
-          missingReason: "Missing ROIC or WACC input for this ticker.",
-          suspiciousReason: "ROIC - WACC falls outside the sanity range and is excluded from ranking.",
+          missingReason: t("portfolio.metricReason.missingRoicWacc"),
+          suspiciousReason: t("portfolio.metricReason.suspiciousRoicWacc"),
           stale,
+          t,
         })
         : buildUnavailableMetric(missingComparisonReason),
       dcfUpside: row
         ? buildNumericMetric(row.dcf_implied_return, {
           sourceMode,
-          missingReason: row.dcf_refusal ? impliedReturnRefusalText(row.dcf_refusal, "en", t) : "Missing DCF output for this ticker.",
-          suspiciousReason: "DCF value vs price falls outside the sanity range and is excluded from ranking.",
+          missingReason: row.dcf_refusal ? impliedReturnRefusalText(row.dcf_refusal, "en", t) : t("portfolio.metricReason.missingDcf"),
+          suspiciousReason: t("portfolio.metricReason.suspiciousDcf"),
           stale,
+          t,
         })
         : buildUnavailableMetric(missingComparisonReason),
       impliedVsWacc: row
@@ -230,16 +234,18 @@ export function buildPortfolioTickerMetrics(args: {
           sourceMode,
           // Says why: a refusal code, or "not recorded before metric v3" when there is none.
           missingReason: impliedReturnRefusalText(row.implied_return_refusal, "en", t),
-          suspiciousReason: "Implied return vs WACC falls outside the sanity range and is excluded from ranking.",
+          suspiciousReason: t("portfolio.metricReason.suspiciousImpliedWacc"),
           stale,
+          t,
         })
         : buildUnavailableMetric(missingComparisonReason),
       volatility: buildNumericMetric(volatilityEstimate, {
         sourceMode,
-        missingReason: "Not enough price history to estimate volatility.",
-        suspiciousReason: "Volatility estimate falls outside the sanity range and is excluded from ranking.",
+        missingReason: t("portfolio.metricReason.volatilityMissing"),
+        suspiciousReason: t("portfolio.metricReason.suspiciousVolatility"),
         stale: false,
         estimated: volatilityEstimate != null,
+        t,
       }),
       currentPrice: row?.current_price ?? stock.last_close ?? null,
       sourceMode,

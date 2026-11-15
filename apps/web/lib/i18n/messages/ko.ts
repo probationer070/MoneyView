@@ -25,6 +25,8 @@ export const ko: Messages = {
     title: "포트폴리오",
     universe: { custom: "사용자 지정 유니버스", portfolioBenchmark: "포트폴리오 + 벤치마크" },
     noDate: "해당 없음",
+    noSyncYet: "아직 동기화 또는 가져오기 기록이 없습니다.",
+    metricReason: { missingDcf: "이 종목의 DCF 산출값이 없습니다.", staleCached: "더 최신 데이터를 사용할 수 없어 캐시된 비교 지표를 사용하고 있습니다.", staleSnapshot: "사용 가능한 가장 최근의 오래된 비교 스냅샷을 사용하고 있습니다.", estimatedSparkline: "비교 API 결과가 아닌 로컬 스파크라인 가격 이력으로 추정했습니다.", excludedCustom: "이 종목은 현재 사용자 지정 비교 유니버스에서 제외되어 있습니다.", noSnapshot: "이 종목의 최신 비교 스냅샷이 없습니다.", liveUnavailable: "이 종목의 최신 실시간 비교를 사용할 수 없습니다.", noCached: "이 종목의 캐시된 비교 결과가 없습니다.", noComparisonLoaded: "아직 포트폴리오 비교 데이터를 불러오지 않았습니다.", missingRoicWacc: "이 종목의 ROIC 또는 WACC 입력값이 없습니다.", suspiciousRoicWacc: "ROIC - WACC가 정상 범위를 벗어나 순위 산정에서 제외됩니다.", suspiciousDcf: "DCF 가치와 주가의 차이가 정상 범위를 벗어나 순위 산정에서 제외됩니다.", suspiciousImpliedWacc: "WACC 대비 내재 수익률이 정상 범위를 벗어나 순위 산정에서 제외됩니다.", volatilityMissing: "변동성을 추정할 가격 이력이 부족합니다.", suspiciousVolatility: "변동성 추정치가 정상 범위를 벗어나 순위 산정에서 제외됩니다." },
     tabs: { label: "포트폴리오 보기", stocks: "종목", weights: "비중" },
     addStock: { title: "종목 추가", open: "+ 종목 추가", search: "검색", placeholder: "종목 코드, 이름 또는 업종 검색", add: "+ 추가", added: "이미 추가됨", empty: "기업 목록에서 일치하는 종목을 찾지 못했습니다." },
     news: { never: "뉴스 갱신", updated: "뉴스 {minutes}분 전 갱신", justNow: "뉴스 방금 갱신", summary: { nothing: "새로고침할 항목 없음", refreshed: "{count}개 갱신", current: "{count}개 이미 최신", failed: "{count}개 실패 ({tickers})", notRecognised: "{count}개 인식 못함 ({tickers})", qualified: "{summary} · 새로고침을 누른 시점에 보이던 종목 기준", failedFallback: "새로고침 실패" } },

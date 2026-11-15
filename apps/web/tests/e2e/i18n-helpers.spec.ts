@@ -5,7 +5,8 @@ import { translate, type MessageKey } from "../../lib/i18n/translate";
 import { impliedReturnRefusalText } from "../../lib/impliedReturn";
 import { formatAuditMetricValue, metricAuditReason } from "../../lib/metricAudit";
 import type { CorporateMetricAuditEntry } from "../../../../packages/shared-types";
-import { formatDateLabel, portfolioComparisonUniverseLabel } from "../../app/portfolio/page";
+import { formatDateLabel, portfolioComparisonUniverseLabel, type PortfolioStock } from "../../app/portfolio/page";
+import { buildPortfolioTickerMetrics } from "../../app/portfolio/portfolioMetrics";
 
 type Params = Record<string, string | number>;
 const koT = (key: MessageKey, params?: Params) => translate(ko, key, params);
@@ -61,4 +62,21 @@ test("catalogs define the new groups in en and ko", () => {
   expect(Object.keys(ko.impliedReturn)).toEqual(Object.keys(en.impliedReturn));
   expect(Object.keys(ko.metricAudit)).toEqual(Object.keys(en.metricAudit));
   expect(Object.keys(ko.portfolio.universe)).toEqual(Object.keys(en.portfolio.universe));
+});
+
+test("buildPortfolioTickerMetrics: a reader reason follows the ko translator, default is the original English", () => {
+  const input: Parameters<typeof buildPortfolioTickerMetrics>[0] = {
+    watchlist: [{ ticker: "AAA", sparkline: [] }] as unknown as PortfolioStock[],
+    activeComparisonData: null,
+    comparisonData: null,
+    portfolioComparisonUniverse: "portfolio_plus_benchmark",
+    portfolioComparisonQueryHasData: false,
+    activeSnapshotMeta: null,
+    estimateVolatilityFromSparkline: () => null,
+  };
+  expect(buildPortfolioTickerMetrics(input).AAA.volatility.reason).toBe("Not enough price history to estimate volatility.");
+
+  const reason = buildPortfolioTickerMetrics({ ...input, t: koT }).AAA.volatility.reason;
+  expect(reason).toBe(translate(ko, "portfolio.metricReason.volatilityMissing"));
+  expect(reason).toMatch(/[가-힣]/);
 });
