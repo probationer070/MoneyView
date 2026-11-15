@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-11-16: normalize was undone by a stale debounced weight draft
+
+Date: 2026-11-16
+Command: `npx playwright test tests/e2e/portfolio-watchlist.spec.ts` (full run, and `--repeat-each=10` on "weight editing and sync or import controls are visible and actionable")
+Failure: the "Normalized saved stock weights to 100.0% invested." message was replaced by "Saved allocation for AAPL." in about 3 of 10 runs; the test failed at line 308 waiting for the normalized message. The persisted AAPL weight went back to 35%.
+Root cause: the allocation auto-save effect reads `debouncedWeightDraftsKey` (450 ms debounce of `weightDrafts`). After a save the effect deletes the ticker from `weightDrafts`, but the debounced copy still holds the old draft "35" for up to 450 ms. If Normalize To 100% ran inside that window it persisted weight 1.0. The watchlist change re-ran the effect, which compared the stale "35" with the new weight and persisted 35% again, overwriting the message.
+Fix: the effect skips a debounced draft unless it still equals the current draft (`weightDraftsRef.current[stock.ticker] === rawDraft`). The ref is updated each render, so `weightDrafts` is not added to the effect deps. Mutation check: removing the guard makes the new regression test fail 9 of 10 runs on a stale save of weight 0.35; with the guard, 10 of 10 pass, and the existing test passes 10 of 10.
+Files changed: apps/web/app/portfolio/page.tsx, apps/web/tests/e2e/portfolio-watchlist.spec.ts (new test "normalize is not undone by a stale debounced weight draft"), apps/web/tests/e2e/helpers/portfolioPageMock.ts (optional `watchlistSaves` stat)
+Prevention: an auto-save keyed on a debounced copy must check the value is still the current draft before persisting.
+
 ## 2026-11-16: font.spec width check on "Market overview" coincided at weight 500
 
 Date: 2026-11-16

@@ -14,6 +14,8 @@ export type PortfolioPageMockStats = {
   comparisonRequests: number;
   stockDetailRequests: number;
   stockSnapshotHistoryRequests: number;
+  /** Every weight persisted through POST /portfolio/watchlist, in request order. */
+  watchlistSaves?: { ticker: string; weight: number }[];
 };
 
 export type PortfolioPageMockOptions = {
@@ -553,6 +555,7 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
 
     if (pathname === `${API_PREFIX}/portfolio/watchlist` && method === "POST") {
       const payload = JSON.parse(route.request().postData() ?? "{}");
+      if (stats) (stats.watchlistSaves ??= []).push({ ticker: payload.ticker, weight: payload.weight });
       const existingRow = watchlist.find((item) => item.ticker === payload.ticker);
       const nextRow: PortfolioStock = {
         ticker: payload.ticker,

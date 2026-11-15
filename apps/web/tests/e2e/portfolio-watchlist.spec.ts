@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { API_PREFIX, json } from "./helpers/mockUtils";
-import { mockPortfolioPageApi } from "./helpers/portfolioPageMock";
+import { mockPortfolioPageApi, type PortfolioPageMockStats } from "./helpers/portfolioPageMock";
 import { portfolioPartialWeightsFixture } from "./fixtures/shared";
 import { openPortfolioPanel, portfolioModal } from "./helpers/portfolioPanels";
 
@@ -322,6 +322,33 @@ test("weight editing and sync or import controls are visible and actionable", as
   await page.getByRole("button", { name: "Import JSON Into DB" }).click();
   await openPortfolioPanel(page, "holdings");
   await expect(page.getByTestId("stock-tile-AAPL")).toBeVisible();
+});
+
+test("normalize is not undone by a stale debounced weight draft", async ({ page }) => {
+  const stats: PortfolioPageMockStats = {
+    comparisonRequests: 0,
+    stockDetailRequests: 0,
+    stockSnapshotHistoryRequests: 0,
+    watchlistSaves: [],
+  };
+  await mockPortfolioPageApi(page, stats);
+  await clearAllHoldings(page);
+  await addHolding(page, "AAPL", "Apple Inc.", "Technology");
+  await savePortfolioAllocation(page, "AAPL", "35");
+  await expect(page.getByText("Saved allocation for AAPL.")).toBeVisible();
+
+  // Normalize straight after the save, while the debounced draft copy still reads 35.
+  const savesBeforeNormalize = stats.watchlistSaves?.length ?? 0;
+  await page.getByRole("button", { name: "Normalize To 100%" }).click();
+  await expect.poll(() => stats.watchlistSaves?.slice(savesBeforeNormalize).at(-1)?.weight).toBe(1);
+  await expect(page.getByText("Normalized saved stock weights to 100.0% invested.")).toBeVisible();
+  // Let the 450 ms debounce window pass so a stale auto-save would have fired by now.
+  await page.waitForTimeout(1000);
+
+  const savesAfterNormalize = stats.watchlistSaves?.slice(savesBeforeNormalize) ?? [];
+  expect(savesAfterNormalize.some((save) => save.ticker === "AAPL" && save.weight === 0.35)).toBe(false);
+  expect(savesAfterNormalize.at(-1)).toEqual({ ticker: "AAPL", weight: 1 });
+  await expect(page.getByText("Normalized saved stock weights to 100.0% invested.")).toBeVisible();
 });
 
 test("allocation normalize updates saved weights to a 100 percent total", async ({ page }) => {

@@ -730,6 +730,8 @@ export default function PortfolioPage() {
   const debouncedBenchmarkTicker = useDebounce(normalizedBenchmarkTicker, 400);
   const debouncedCustomTickersInput = useDebounce(normalizedCustomTickersInput, 400);
   const debouncedWeightDraftsKey = useDebounce(JSON.stringify(weightDrafts), 450);
+  const weightDraftsRef = useRef(weightDrafts);
+  weightDraftsRef.current = weightDrafts;
   const debouncedTotalInvestmentInput = useDebounce(totalInvestmentInput, 500);
 
   // Watchlist query is the source for holdings and detail entry points.
@@ -1454,6 +1456,9 @@ export default function PortfolioPage() {
       .map((stock) => {
         const rawDraft = debouncedWeightDrafts[stock.ticker];
         if (rawDraft == null) return null;
+        // The debounced copy lags by up to 450 ms. Skip a draft that was already saved or replaced
+        // (e.g. by Normalize), so a stale value is not persisted over the newer weight.
+        if (weightDraftsRef.current[stock.ticker] !== rawDraft) return null;
         const nextPercent = parseAllocationPercent(rawDraft, stock.weight * 100);
         const currentPercent = Number((stock.weight * 100).toFixed(1));
         if (Math.abs(nextPercent - currentPercent) < 0.05) return null;
