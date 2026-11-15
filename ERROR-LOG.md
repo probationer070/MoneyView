@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-11-16: metric history gave 0.8% CRP to a caller already told assumptions were missing
+
+Date: 2026-11-16
+Command: `pytest tests/api/test_s2b_assumptions.py` (written during S2b of the WACC/Ke live-premia plan)
+Failure: `yahoo_metric_history` for a non-mature reporter returned `country_risk_premium` 0.8 although the request had resolved "assumptions missing" (no CRP on file).
+Root cause: after S2a, `country_risk_premium_for(currency, None)` treats `None` as "not passed" and re-reads the DB, so a `None` meaning "already resolved, and missing" was replaced by a second lookup's value.
+Fix: 74ff9d4 makes the history path pass the CRP it resolved and return null for a non-mature reporter when none is on file (0.0 stays for USD/CAD/EUR reporters); test `test_history_crp_is_null_not_a_default`, with its mutation in `test_s2b_assumptions_mutations.py`.
+Files changed: `apps/api/services/corporate_statement_metrics.py`, `tests/api/test_s2b_assumptions.py`, `tests/api/test_s2b_assumptions_mutations.py`.
+Prevention: a helper whose `None` argument means "resolve it yourself" must not be fed a `None` that means "resolved and missing"; pass the resolver result object, not a bare optional value.
+
 ## 2026-11-16: normalize was undone by a stale debounced weight draft
 
 Date: 2026-11-16
