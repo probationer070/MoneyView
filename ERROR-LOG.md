@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-11-16: font.spec width check on "Market overview" coincided at weight 500
+
+Date: 2026-11-16
+Command: `npx playwright test` (full Playwright run)
+Failure: tests/e2e/font.spec.ts: `Math.abs(r.latinHost - r.latinPre) > 2` got 0.0156 (Host Grotesk and Pretendard 500 measured 302.77 vs 302.78 px for "Market overview").
+Root cause: Host Grotesk is uniwidth, so its width is the same at every weight. In Chromium 147 (playwright chromium-1243, installed 2026-11-03) Pretendard 500 happens to measure the same width for that one sample. The fonts render correctly; the single sample could not tell them apart.
+Fix: the discriminator compares a second sample, "Hamburgefonstiv 0123", measured in Host Grotesk and Pretendard (429.05 vs 415.80 px). The "Market overview" measurements used by the other assertions are unchanged. Mutation check: pointing the host sample at the Pretendard font fails line 38 with received 0.
+Files changed: apps/web/tests/e2e/font.spec.ts
+Prevention: font-identity checks compare more than one sample or glyph shape, not one coincidental width.
+
 ## 2026-11-15: the top nav's current-page underline was a box-shadow (paper-sweep failed on every route)
 
 Date: 2026-11-15

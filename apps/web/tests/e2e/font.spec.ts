@@ -29,13 +29,13 @@ test("Host Grotesk sets Latin, Pretendard sets Hangul, Geist Mono sets figures",
       f, loaded,
       latinSans: width("Market overview", f.sans), latinHost: width("Market overview", f.host), latinPre: width("Market overview", f.pre),
       hangulSans: width("시장개요가치평가", f.sans), hangulPre: width("시장개요가치평가", f.pre), hangulSerif: width("시장개요가치평가", "serif"),
-      ones: width("111.11", f.mono), eights: width("888.88", f.mono), geistOnes: width("111.11", f.geist),
+      ones: width("111.11", f.mono), eights: width("888.88", f.mono), geistOnes: width("111.11", f.geist), hamHost: width("Hamburgefonstiv 0123", f.host), hamPre: width("Hamburgefonstiv 0123", f.pre),
     };
   });
   for (const value of Object.values(r.f)) expect(value, "a font variable is empty").not.toBe("");
   for (const name of ["hostgrotesk", "pretendard", "geistmono"]) expect(r.loaded.some((x) => x.includes(name)), `${name} loaded`).toBe(true);
   expect(Math.abs(r.latinSans - r.latinHost)).toBeLessThan(0.5); // Latin comes from Host Grotesk
-  expect(Math.abs(r.latinHost - r.latinPre)).toBeGreaterThan(2); // ...which is measurably not Pretendard
+  expect(Math.abs(r.hamHost - r.hamPre)).toBeGreaterThan(2); // ...which is measurably not Pretendard (a second sample: Pretendard 500 ties Host Grotesk on "Market overview")
   // The Hangul sample has no spaces: a space comes from the Latin font (Host Grotesk), not Pretendard.
   expect(Math.abs(r.hangulSans - r.hangulPre)).toBeLessThan(0.5); // Hangul falls through to Pretendard
   expect(Math.abs(r.hangulPre - r.hangulSerif)).toBeGreaterThan(2); // ...and Pretendard really rendered
