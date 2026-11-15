@@ -342,10 +342,6 @@ test("portfolio first load auto-loads the latest comparison snapshot while histo
   await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: "Portfolio", exact: true })).toBeVisible({ timeout: 60_000 });
-  await openPortfolioPanel(page, "snapshot");
-  await expect(page.getByText("Saved snapshot history stays idle until you refresh portfolio analysis.")).toBeVisible();
-  await expect(page.getByText("Latest Snapshot Summary").first()).toBeVisible();
-  await expect(page.getByText(/Market expected return: 9\.70%/)).toBeVisible();
   await openPortfolioPanel(page, "attribution");
   await expect(page.getByText("Attribution stays idle on first load. Click Refresh Analysis when you want current portfolio attribution.")).toBeVisible();
   await page.waitForTimeout(300);
@@ -535,10 +531,6 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
   await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: "Portfolio", exact: true })).toBeVisible({ timeout: 60_000 });
-  await openPortfolioPanel(page, "snapshot");
-  await expect(page.getByText("Last updated")).toBeVisible();
-  await expect(page.getByText("Latest Snapshot Summary").first()).toBeVisible();
-  await expect(page.getByText("Beats WACC (implied return)")).toBeVisible();
   // The cached portfolio return renders in the attribution panel.
   await openPortfolioPanel(page, "attribution");
   await expect(page.getByText("8.0%").first()).toBeVisible();
@@ -549,7 +541,6 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
   expect(stats.stockDetailRequests).toBe(0);
   expect(stats.stockSnapshotHistoryRequests).toBe(0);
 
-  await openPortfolioPanel(page, "snapshot");
   await page.getByRole("button", { name: "Refresh Analysis" }).click();
   await expect.poll(() => stats.comparisonRequests).toBe(2);
   await expect.poll(() => stats.comparisonHistoryRequests).toBe(1);
@@ -569,8 +560,8 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
   expect(stats.stockDetailRequests).toBe(0);
   expect(stats.stockSnapshotHistoryRequests).toBe(0);
 
-  await openPortfolioPanel(page, "holdings");
-  await page.locator('[role="button"]').filter({ hasText: "Apple" }).first().click();
+  await page.getByRole("tab", { name: "Stocks", exact: true }).click();
+  await page.getByRole("button", { name: /^Open details for/ }).first().click();
   const stockDetailDialog = portfolioModal(page);
   await expect(stockDetailDialog).toBeVisible();
   await expect.poll(() => stats.stockDetailRequests).toBe(1);

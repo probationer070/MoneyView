@@ -58,4 +58,21 @@ test("Add To Portfolio from the stock detail modal lands on the Weights tab", as
   await modal.getByRole("button", { name: /Review Portfolio Weight|Add To Portfolio/ }).click();
 
   await expect(page.getByRole("tab", { name: "Weights" })).toHaveAttribute("aria-selected", "true");
+
+  // The focus is deferred one animation frame on purpose, so read it until it settles
+  // rather than once.
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const active = document.activeElement as HTMLElement | null;
+        const panel = document.querySelector('[role="tabpanel"]');
+        return {
+          tag: active?.tagName ?? null,
+          type: active?.getAttribute("type") ?? null,
+          insidePanel: Boolean(panel && active && panel.contains(active)),
+          rowTicker: active?.closest("tr")?.querySelector("td")?.textContent ?? null,
+        };
+      }),
+    )
+    .toEqual({ tag: "INPUT", type: "number", insidePanel: true, rowTicker: "AAPL" });
 });

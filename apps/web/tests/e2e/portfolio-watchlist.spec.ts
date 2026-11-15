@@ -20,12 +20,18 @@ async function clearAllHoldings(page: Page) {
   await gotoPortfolio(page);
   await openPortfolioPanel(page, "holdings");
 
-  while ((await removeButtons(page).count()) > 0) {
-    await removeButtons(page).first().click();
-    await page.waitForTimeout(500);
+  // The Remove button lives in the stock detail modal now that the holdings panel is gone.
+  const tiles = page.getByRole("button", { name: /^Open details for/ });
+  let remaining = await tiles.count();
+  while (remaining > 0) {
+    await tiles.first().click({ force: true });
+    const dialog = portfolioModal(page);
+    await dialog.getByRole("button", { name: "Remove From Watchlist" }).click();
+    await expect(dialog).toHaveCount(0);
+    // Wait for the tile to leave before opening the next one, or the modal opens for a stock being removed.
+    remaining -= 1;
+    await expect(tiles).toHaveCount(remaining);
   }
-
-  await expect(page.getByText("No Holdings Yet")).toBeVisible();
 }
 
 async function addHolding(page: Page, ticker: string, name: string, sector: string) {
@@ -63,7 +69,7 @@ async function savePortfolioAllocation(page: Page, ticker: string, allocationPer
 }
 
 async function refreshPortfolioAnalysis(page: Page) {
-  await openPortfolioPanel(page, "snapshot");
+  await openPortfolioPanel(page, "attribution");
   await page.getByRole("button", { name: "Refresh Analysis" }).click();
   await expect(page.getByText(/Refreshing portfolio comparison, snapshot history, and attribution\./)).toBeVisible();
 }
@@ -135,7 +141,7 @@ test.describe("wide window layout", () => {
     await clearAllHoldings(page);
     await addHolding(page, "AAPL", "Apple Inc.", "Technology");
     await openPortfolioPanel(page, "holdings");
-    await page.locator('[role="button"]').filter({ hasText: "Apple Inc." }).first().click();
+    await page.getByTestId("stock-tile-AAPL").click();
     const dialog = portfolioModal(page);
     const roic = dialog.getByText("ROIC - WACC", { exact: true }).first();
     await expect(roic).toBeVisible({ timeout: 60_000 });
@@ -178,7 +184,7 @@ test("clicking a holding opens the stock detail modal", async ({ page }) => {
   await addHolding(page, "AAPL", "Apple Inc.", "Technology");
   await openPortfolioPanel(page, "holdings");
 
-  const stockTrigger = page.locator('[role="button"]').filter({ hasText: "Apple Inc." }).first();
+  const stockTrigger = page.getByTestId("stock-tile-AAPL");
   await stockTrigger.focus();
   await expect(stockTrigger).toBeFocused();
   await stockTrigger.click();
@@ -239,7 +245,7 @@ test("the stock modal saves a theme without touching the sector", async ({ page 
 
   await gotoPortfolio(page);
   await openPortfolioPanel(page, "holdings");
-  await page.locator('[role="button"]').filter({ hasText: "Apple" }).first().click();
+  await page.getByTestId("stock-tile-AAPL").click();
 
   const stockDetailDialog = portfolioModal(page);
   await expect(stockDetailDialog).toBeVisible();
@@ -264,7 +270,7 @@ test("stock detail modal shows explicit error states when detail and news reques
   await refreshPortfolioAnalysis(page);
 
   await openPortfolioPanel(page, "holdings");
-  await page.locator('[role="button"]').filter({ hasText: "Apple Inc." }).first().click();
+  await page.getByTestId("stock-tile-AAPL").click();
 
   const stockDetailDialog = portfolioModal(page);
   await expect(stockDetailDialog).toBeVisible();
@@ -278,7 +284,7 @@ test("deleted holdings stay searchable and can reopen detail from the stock sear
   await addHolding(page, "AAPL", "Apple Inc.", "Technology");
 
   await clearAllHoldings(page);
-  await expect(page.getByText("No Holdings Yet")).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Open details for/ })).toHaveCount(0);
 
   await openPortfolioPanel(page, "allocation");
   await page.getByLabel("Stock browser search").fill("AAPL");
@@ -311,46 +317,12 @@ test("weight editing and sync or import controls are visible and actionable", as
   await page.getByLabel("Total investment amount").fill("25000");
   await expect(page.getByText(/Saved total investment amount/)).toBeVisible();
 
-  await openPortfolioPanel(page, "snapshot");
-  await expect(page.getByText("Latest Snapshot Summary").first()).toBeVisible();
-  await expect(page.getByLabel("Portfolio comparison source")).toBeVisible();
-  await expect(page.getByLabel("Portfolio comparison universe")).toBeVisible();
-  await expect(page.getByLabel("Portfolio benchmark preset")).toBeVisible();
-  await expect(page.getByLabel("Portfolio benchmark ticker")).toHaveValue("^GSPC");
-  await expect(page.getByText(/Preset is currently S&P 500\./)).toBeVisible();
-  await expect(page.getByText(/Live mode is review-only\./)).toBeVisible();
-  await page.getByLabel("Portfolio comparison source").selectOption("live");
-  await refreshPortfolioAnalysis(page);
-  await expect(page.getByText(/Market expected return: 9\.70%/)).toBeVisible();
-  await expect(page.getByText(/Primary stock return:/)).toBeVisible();
-  await page.getByLabel("Portfolio benchmark preset").selectOption("kosdaq");
-  await expect(page.getByLabel("Portfolio benchmark ticker")).toHaveValue("^KQ11");
-  await expect(page.getByText(/Preset is currently KOSDAQ\./)).toBeVisible();
-  await page.getByLabel("Portfolio comparison universe").selectOption("custom");
-  await expect(page.getByLabel("Portfolio custom tickers")).toBeVisible();
-  await expect(page.getByText(/Custom Universe compares the selected benchmark/)).toBeVisible();
-  await page.getByLabel("Portfolio benchmark ticker").fill("^IXIC");
-  await page.getByLabel("Portfolio custom tickers").fill("NVDA, TSLA");
-  await refreshPortfolioAnalysis(page);
-  await expect(page.getByText(/Custom tickers:/)).toBeVisible();
-  await expect(page.getByText("NVDA, TSLA")).toBeVisible();
-  await expect(page.getByText(/Preset is currently Manual ticker\./)).toBeVisible();
-  await page.getByRole("button", { name: "Save Current As Snapshot" }).click();
-  await expect(page.getByText(/Saved portfolio snapshot for/)).toBeVisible();
+  // The date inputs moved from the header into the Attribution tab.
+  await openPortfolioPanel(page, "attribution");
   await page.getByLabel("Holding Start Date").fill("2026-01-15");
   await page.getByLabel("Return End Date").fill("2026-04-10");
   await expect(page.getByLabel("Holding Start Date")).toHaveValue("2026-01-15");
   await expect(page.getByLabel("Return End Date")).toHaveValue("2026-04-10");
-  await page.getByRole("button", { name: "Open Snapshot History" }).click();
-  const snapshotHistoryDialog = portfolioModal(page);
-  await expect(snapshotHistoryDialog).toBeVisible();
-  await expect(snapshotHistoryDialog.getByRole("heading", { name: "Snapshot History" })).toBeVisible();
-  await expect(snapshotHistoryDialog.getByText("manual_refresh snapshot")).toBeVisible();
-  await snapshotHistoryDialog.getByRole("button", { name: "Review Snapshot" }).nth(1).click();
-  await expect(page.getByText(/Reviewing saved snapshot from Apr 10, 2026|Reviewing saved snapshot from 4\/10\/2026/)).toBeVisible();
-  await expect(page.getByText(/saved benchmark and universe from that snapshot stay locked/i)).toBeVisible();
-  await page.getByLabel("Portfolio benchmark preset").selectOption("kosdaq");
-  await expect(page.getByLabel("Portfolio benchmark ticker")).toHaveValue("^KQ11");
 
   await openPortfolioPanel(page, "allocation");
   await expect(page.getByRole("button", { name: "Normalize To 100%" })).toBeVisible();
@@ -358,15 +330,13 @@ test("weight editing and sync or import controls are visible and actionable", as
   await expect(applyToSnapshotToggle).not.toBeChecked();
   await applyToSnapshotToggle.check();
   await savePortfolioAllocation(page, "AAPL", "35");
-  // The confirmation for this allocation-panel action is rendered by the snapshot panel.
-  await openPortfolioPanel(page, "snapshot");
   await expect(page.getByText(/Saved allocation changes and updated the/)).toBeVisible();
-  await openPortfolioPanel(page, "allocation");
   await page.getByRole("button", { name: "Normalize To 100%" }).click();
   await expect(page.getByText("Normalized saved stock weights to 100.0% invested.")).toBeVisible();
 
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "Portfolio", exact: true })).toBeVisible({ timeout: 60_000 });
+  await openPortfolioPanel(page, "attribution");
   await expect(page.getByLabel("Holding Start Date")).toHaveValue("2026-01-15");
   await expect(page.getByLabel("Return End Date")).toHaveValue("2026-04-10");
 
@@ -510,7 +480,7 @@ test("the trend delta is not taken across a snapshot that recorded no implied re
   await addHolding(page, "AAPL", "Apple Inc.", "Technology");
   await refreshPortfolioAnalysis(page);
   await openPortfolioPanel(page, "holdings");
-  await page.locator('[role="button"]').filter({ hasText: "Apple Inc." }).first().click();
+  await page.getByTestId("stock-tile-AAPL").click();
   const delta = portfolioModal(page).getByTestId("implied-spread-trend-delta");
   await expect(delta).toBeVisible();
   await expect(delta).not.toHaveText("2.00%");
@@ -543,7 +513,7 @@ async function openAppleDetailWithHistory(page: Page, points: Array<Record<strin
   await addHolding(page, "AAPL", "Apple Inc.", "Technology");
   await refreshPortfolioAnalysis(page);
   await openPortfolioPanel(page, "holdings");
-  await page.locator('[role="button"]').filter({ hasText: "Apple Inc." }).first().click();
+  await page.getByTestId("stock-tile-AAPL").click();
   return portfolioModal(page);
 }
 

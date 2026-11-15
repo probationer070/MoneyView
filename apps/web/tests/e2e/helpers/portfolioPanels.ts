@@ -23,9 +23,6 @@ export async function openPortfolioPanel(page: Page, id: PortfolioPanelId) {
   if (id === "snapshot") {
     throw new Error('The snapshot panel was removed from /portfolio; there is nothing to open for "snapshot".');
   }
-  if (id === "holdings") {
-    throw new Error('The holdings panel was removed from /portfolio; the Stocks tab replaces it (a table view arrives with the Stocks tab redesign).');
-  }
   const tab = page.getByRole("tab", { name: TABS[id], exact: true });
   await tab.click();
   await expect(tab).toHaveAttribute("aria-selected", "true");

@@ -89,9 +89,10 @@ test("a watchlist refetch keeps the status line and keeps Import hidden until th
   });
   await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "Portfolio", exact: true })).toBeVisible({ timeout: 60_000 });
+  // The status line is in the Stocks tab; Import and Export are in the Weights tab.
+  await expect(line(page)).toHaveText("Sync on · no other PC has synced yet");
   await openPortfolioPanel(page, "allocation");
   const importButton = page.getByRole("button", { name: "Import JSON Into DB" });
-  await expect(line(page)).toHaveText("Sync on · no other PC has synced yet");
   await expect(importButton).toHaveCount(0);
 
   slow = true;
@@ -99,9 +100,13 @@ test("a watchlist refetch keeps the status line and keeps Import hidden until th
   await page.getByRole("button", { name: "Export Watchlist To JSON" }).click();
   await held;
   // Sampled without retrying, inside the 3 s hold: a retrying assertion would wait the hold out.
-  for (let sample = 0; sample < 4; sample += 1) {
-    expect.soft(await line(page).isVisible(), `status line visible at sample ${sample}`).toBe(true);
+  for (let sample = 0; sample < 2; sample += 1) {
     expect.soft(await importButton.count(), `Import hidden at sample ${sample}`).toBe(0);
+    await page.waitForTimeout(400);
+  }
+  await openPortfolioPanel(page, "holdings");
+  for (let sample = 0; sample < 2; sample += 1) {
+    expect.soft(await line(page).isVisible(), `status line visible at sample ${sample}`).toBe(true);
     await page.waitForTimeout(400);
   }
 });

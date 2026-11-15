@@ -10,10 +10,6 @@ import { mockPortfolioPageApi } from "./helpers/portfolioPageMock";
 
 const RAIL_REFRESH = "Refresh news for visible stocks";
 
-function rail(page: Page) {
-  return page.getByTestId("portfolio-rail");
-}
-
 async function gotoGrid(page: Page) {
   await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "Portfolio", exact: true })).toBeVisible({ timeout: 60_000 });
@@ -42,7 +38,7 @@ test("refresh names the tickers the backend did not recognise", async ({ page })
   await mockPortfolioPageApi(page, undefined, { acquireSkippedUnknown: ["ZZZZ", "QQQQ"] });
   await gotoGrid(page);
 
-  await rail(page).getByRole("button", { name: RAIL_REFRESH }).click();
+  await page.getByRole("button", { name: RAIL_REFRESH }).click();
 
   const summary = page.getByTestId("news-refresh-summary");
   // Named, not counted: which ticker was dropped is the actionable part, and the count
@@ -54,7 +50,7 @@ test("refresh with nothing to do does not report it as a successful refresh", as
   await mockPortfolioPageApi(page, undefined, { acquireReturnsNoResults: true });
   await gotoGrid(page);
 
-  await rail(page).getByRole("button", { name: RAIL_REFRESH }).click();
+  await page.getByRole("button", { name: RAIL_REFRESH }).click();
 
   const summary = page.getByTestId("news-refresh-summary");
   // "0 refreshed · 0 already current" is a report about work that never happened; it
