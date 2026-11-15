@@ -1,7 +1,6 @@
 import type { CorporateMetricAuditEntry, DcfSummary } from "../../../../packages/shared-types";
 import { bridgedEstimatedValue, bridgedUpsidePct } from "@/lib/bridgeQuality";
 import type { CorporateAssumptions } from "./corporateTypes";
-import { EQUITY_RISK_PREMIUM, KOREA_COUNTRY_RISK_PREMIUM, RISK_FREE_RATE } from "./corporateConstants";
 import type { FormulaContext } from "./substitutedFormula";
 
 /** The page's values that the summary formulas print (plan N2). Every field is read from the page's own state. */
@@ -9,12 +8,15 @@ export interface FormulaInputs {
   assumptions: Pick<CorporateAssumptions, "roic" | "wacc" | "reinvestment" | "unleveredBeta"> & { crp?: number };
   derived: Pick<FormulaContext, "spread" | "bottomUpKe" | "leveredBeta" | "sustainableGrowth" | "debtToEquity" | "taxRate" | "keFromWacc">;
   impliedErp: number;
+  /** Percent points from `metrics.assumptions`; NaN when the metrics carry none (the formula then prints a dash). */
+  riskFreeRate: number;
+  equityRiskPremium: number;
   impliedMarketReturn: number;
   waccAudit: CorporateMetricAuditEntry | null;
   dcfData: DcfSummary | null;
 }
 
-export function buildFormulaContext({ assumptions, derived, impliedErp, impliedMarketReturn, waccAudit, dcfData }: FormulaInputs): FormulaContext {
+export function buildFormulaContext({ assumptions, derived, impliedErp, riskFreeRate, equityRiskPremium, impliedMarketReturn, waccAudit, dcfData }: FormulaInputs): FormulaContext {
   return {
     roic: assumptions.roic,
     wacc: assumptions.wacc,
@@ -25,12 +27,12 @@ export function buildFormulaContext({ assumptions, derived, impliedErp, impliedM
     leveredBeta: derived.leveredBeta,
     sustainableGrowth: derived.sustainableGrowth,
     debtToEquity: derived.debtToEquity,
-    riskFreeRate: RISK_FREE_RATE,
+    riskFreeRate,
     impliedErp,
-    equityRiskPremium: EQUITY_RISK_PREMIUM,
+    equityRiskPremium,
     keFromWacc: derived.keFromWacc,
     impliedMarketReturn,
-    countryRiskPremium: assumptions.crp ?? KOREA_COUNTRY_RISK_PREMIUM,
+    countryRiskPremium: assumptions.crp ?? Number.NaN,
     taxRate: derived.taxRate,
     waccAudit,
     // Bridged values only: a suppressed intrinsic value or upside is null, so no formula prints it.

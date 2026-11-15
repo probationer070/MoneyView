@@ -192,9 +192,11 @@ function row(ticker: string, over: Partial<CorporateComparisonRowApi> = {}): Cor
 test.describe("buildFormulaContext (plan N2: one module feeds the page)", () => {
   // Every input has its own sentinel, so two swapped fields print a different sentence.
   const INPUTS = {
-    assumptions: { roic: 21.1, wacc: 7.3, reinvestment: 33.3, unleveredBeta: 0.61 },
+    assumptions: { roic: 21.1, wacc: 7.3, reinvestment: 33.3, unleveredBeta: 0.61, crp: 0.8 },
     derived: { spread: 13.8, bottomUpKe: 9.9, leveredBeta: 0.87, sustainableGrowth: 7.7, debtToEquity: 0.45, taxRate: 0.25, keFromWacc: false },
     impliedErp: 4.6,
+    riskFreeRate: 4.2,
+    equityRiskPremium: 5.5,
     impliedMarketReturn: 8.8,
     waccAudit: {
       value: 6.9, display_value: "6.9%", method: "test", quality: "ok" as const, reason: null, warnings: [], confidence: 0.9,

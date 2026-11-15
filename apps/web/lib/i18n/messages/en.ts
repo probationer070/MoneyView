@@ -1189,7 +1189,7 @@ export const en = {
       bottomUpKe: {
         title: "{company} Bottom-up Ke",
         timeHorizon: "The Ke inside the WACC: fixed risk-free rate and ERP (model policy), the country risk premium by reporting currency, and the WACC's levered beta.",
-        manualMacro: "Manual macro assumption",
+        manualMacro: "{source}",
         yahooBetaInWacc: "Yahoo beta, the one inside the WACC",
         hamadaNoWacc: "Hamada formula (no WACC beta for these metrics)",
         equityRiskPremium: "Equity Risk Premium",
@@ -1200,7 +1200,7 @@ export const en = {
         taxShield: "Tax Shield",
         taxRateDetail: "1 - tax rate {tax}",
         betaFormula: "betaU x [1 + (1 - tax) x D/E]",
-        policyErpSource: "Model policy input, the same ERP as the WACC",
+        policyErpSource: "{source}, the same ERP as the WACC",
         debtRatioSource: "Yahoo annual balance sheet debt ratios averaged from 2021 onward",
         unleveredBetaSource: "Yahoo beta de-levered with averaged annual statement D/E and tax rate",
         finalKe: "Final Bottom-up Ke",
@@ -1244,7 +1244,7 @@ export const en = {
       hurdle: {
         title: "{company} Hurdle Rate Decomposition",
         timeHorizon: "Fixed model inputs: risk-free rate 4.2%, and an implied ERP solved from a fixed cash yield and growth path. The company's own CRP is set by its reporting currency.",
-        fredMacro: "FRED / macro assumption",
+        fredMacro: "{source}",
         crp: "CRP",
         expectedReturn: "Expected Market Return (IRR)",
         expectedReturnSource: "Fixed model: first-year cash yield and a 5-year growth path, both constants. The cash flows scale with the index, so the index level cancels out and this does not move with the market",
@@ -1681,7 +1681,7 @@ export const en = {
           stableGrowthSource: "Risk-free rate as long-term economic growth proxy",
           leveredBetaSource: "Hamada beta model | Period: 5-year beta convention plus current leverage",
           riskFree: "Risk-free Rate",
-          riskFreeSource: "FRED / macro assumption | Period: current market snapshot",
+          riskFreeSource: "{source} | Period: current market snapshot",
         },
         sim: {
           solveIrr: "Solve IRR where S&P 500 price {price} equals PV of dividends + buybacks and terminal value",

@@ -65,7 +65,7 @@ export type CorporatePageMockOptions = {
   /** Holds the AAPL metrics response until this resolves, so a test can act while the page's inputs are still the seed. */
   holdAaplMetrics?: Promise<void>;
   /** Replaces fields of the AAPL metrics response (snake_case API names), for tests of hydrated inputs. */
-  aaplMetricsPatch?: Record<string, number>;
+  aaplMetricsPatch?: Record<string, unknown>;
 };
 
 export type BridgeQuality = "ok" | "estimated" | "missing";
@@ -705,6 +705,11 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
         debt_ratio: 18,
         unlevered_beta: 1.05,
         crp: 0.8,
+        assumptions: {
+          risk_free_rate: 4.2, risk_free_source: "owner", risk_free_as_of: "2026-11-16",
+          equity_risk_premium: 5.5, erp_source: "owner", erp_as_of: "2026-11-16",
+          crp: 0.8, crp_basis: "non_mature_rule", stale: [],
+        },
         reinvestment: 34,
         fcff: 92,
         innovation: 82,
@@ -750,6 +755,11 @@ export async function mockCorporatePageApi(page: Page, stats?: CorporatePageMock
         debt_ratio: 15,
         unlevered_beta: 0.95,
         crp: 0.8,
+        assumptions: {
+          risk_free_rate: 4.2, risk_free_source: "owner", risk_free_as_of: "2026-11-16",
+          equity_risk_premium: 5.5, erp_source: "owner", erp_as_of: "2026-11-16",
+          crp: 0.8, crp_basis: "non_mature_rule", stale: [],
+        },
         reinvestment: 40,
         fcff: 120,
         innovation: 88,

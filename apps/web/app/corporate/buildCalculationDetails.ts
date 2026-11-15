@@ -1,5 +1,6 @@
 import type { DcfSummaryResponse as DCFResult } from "../../../../packages/shared-types";
 import type { CalculationDetail, CalculationDetailKey, CalculationRow } from "./components/calculationDetailTypes";
+import { MISSING } from "@/lib/format";
 import { bridgedEstimatedValue, bridgedUpsidePct, UNBRIDGED_PLACEHOLDER } from "@/lib/bridgeQuality";
 import type { useT } from "@/lib/i18n/locale";
 import type { MessageKey } from "@/lib/i18n/translate";
@@ -76,6 +77,9 @@ interface BuildCalculationDetailsArgs {
   /** Percent. The ERP inside Ke and WACC; the implied ERP is a reference only. */
   equityRiskPremium: number;
   riskFreeRate: number;
+  /** "FRED DGS10, 2026-11-13": where the echoed rf / ERP came from. */
+  riskFreeSourceLine?: string;
+  erpSourceLine?: string;
   koreaCountryRiskPremium: number;
   growthBasisLabel: string;
   roicBasisLabel: string;
@@ -100,6 +104,8 @@ export function buildCalculationDetails({
   taxRate,
   equityRiskPremium,
   riskFreeRate,
+  riskFreeSourceLine = MISSING,
+  erpSourceLine = MISSING,
   koreaCountryRiskPremium,
   growthBasisLabel,
   roicBasisLabel,
@@ -416,7 +422,7 @@ export function buildCalculationDetails({
         { label: t("corporate.calc.erp.sourcing.growth"), value: impliedErpInputs.growthRates.map((growth) => pct(growth)).join(" -> "), source: t("corporate.calc.erp.sourcing.growthSource") },
         { label: t("corporate.calc.erp.sourcing.stableGrowth"), value: pct(impliedErpInputs.stableGrowth), source: t("corporate.calc.erp.sourcing.stableGrowthSource") },
         { label: t("corporate.calc.common.leveredBeta"), value: numberText2(derived.leveredBeta), source: t("corporate.calc.erp.sourcing.leveredBetaSource") },
-        { label: t("corporate.calc.erp.sourcing.riskFree"), value: pct(riskFreeRate), source: t("corporate.calc.erp.sourcing.riskFreeSource") },
+        { label: t("corporate.calc.erp.sourcing.riskFree"), value: pct(riskFreeRate), source: t("corporate.calc.erp.sourcing.riskFreeSource", { source: riskFreeSourceLine }) },
       ],
       simulation: [
         { label: "1", value: t("corporate.calc.erp.sim.solveIrr", { price: numberText(impliedErpInputs.indexLevel) }), source: pct(impliedMarketReturn) },
@@ -520,9 +526,9 @@ export function buildCalculationDetails({
       title: t("corporate.calc.bottomUpKe.title", { company: companyName }),
       timeHorizon: t("corporate.calc.bottomUpKe.timeHorizon"),
       summary: [
-        { label: t("corporate.calc.shared.riskFreeRate"), value: pct(riskFreeRate), source: t("corporate.calc.bottomUpKe.manualMacro") },
+        { label: t("corporate.calc.shared.riskFreeRate"), value: pct(riskFreeRate), source: t("corporate.calc.bottomUpKe.manualMacro", { source: riskFreeSourceLine }) },
         { label: t("corporate.calc.common.leveredBeta"), value: numberText2(derived.leveredBeta), source: derived.keFromWacc ? t("corporate.calc.bottomUpKe.yahooBetaInWacc") : t("corporate.calc.bottomUpKe.hamadaNoWacc") },
-        { label: t("corporate.calc.bottomUpKe.equityRiskPremium"), value: pct(equityRiskPremium), source: t("corporate.calc.bottomUpKe.policyErpSource") },
+        { label: t("corporate.calc.bottomUpKe.equityRiskPremium"), value: pct(equityRiskPremium), source: t("corporate.calc.bottomUpKe.policyErpSource", { source: erpSourceLine }) },
         { label: t("corporate.calc.common.countryRiskPremium"), value: pct(koreaCountryRiskPremium), source: t("corporate.calc.common.crpSource") },
         { label: t("corporate.calc.common.bottomUpKe"), value: pct(derived.bottomUpKe), source: derived.keFromWacc ? t("corporate.calc.bottomUpKe.keInWacc") : t("corporate.calc.bottomUpKe.reRelevered") },
       ],
@@ -535,8 +541,8 @@ export function buildCalculationDetails({
       formula: `Ke = ${pct(riskFreeRate)} + ${numberText2(derived.leveredBeta)} x ${pct(equityRiskPremium)} + ${pct(koreaCountryRiskPremium)}`,
       result: pct(derived.bottomUpKe),
       sourcing: [
-        { label: t("corporate.calc.shared.riskFreeRate"), value: pct(riskFreeRate), source: t("corporate.calc.bottomUpKe.manualMacro") },
-        { label: "ERP", value: pct(equityRiskPremium), source: t("corporate.calc.bottomUpKe.policyErpSource") },
+        { label: t("corporate.calc.shared.riskFreeRate"), value: pct(riskFreeRate), source: t("corporate.calc.bottomUpKe.manualMacro", { source: riskFreeSourceLine }) },
+        { label: "ERP", value: pct(equityRiskPremium), source: t("corporate.calc.bottomUpKe.policyErpSource", { source: erpSourceLine }) },
         { label: "CRP", value: pct(koreaCountryRiskPremium), source: t("corporate.calc.common.crpSource") },
         { label: t("corporate.calc.common.debtRatio"), value: pct(assumptions.debtRatio), source: t("corporate.calc.bottomUpKe.debtRatioSource") },
         { label: t("corporate.calc.common.unleveredBeta"), value: numberText(assumptions.unleveredBeta), source: t("corporate.calc.bottomUpKe.unleveredBetaSource") },
@@ -619,7 +625,7 @@ export function buildCalculationDetails({
       title: t("corporate.calc.hurdle.title", { company: companyName }),
       timeHorizon: t("corporate.calc.hurdle.timeHorizon"),
       summary: [
-        { label: t("corporate.calc.shared.riskFreeRate"), value: pct(riskFreeRate), source: t("corporate.calc.hurdle.fredMacro") },
+        { label: t("corporate.calc.shared.riskFreeRate"), value: pct(riskFreeRate), source: t("corporate.calc.hurdle.fredMacro", { source: riskFreeSourceLine }) },
         { label: t("corporate.calc.hurdle.expectedReturn"), value: pct(impliedMarketReturn), source: t("corporate.calc.hurdle.expectedReturnSource") },
         { label: t("corporate.calc.hurdle.impliedErp"), value: pct2(impliedErp), source: t("corporate.calc.hurdle.impliedErpSource") },
         { label: t("corporate.calc.hurdle.betaErp"), value: pct(derived.leveredBeta * equityRiskPremium), source: t("corporate.calc.hurdle.betaErpSource", { erp: pct(equityRiskPremium) }) },
@@ -627,7 +633,7 @@ export function buildCalculationDetails({
         { label: t("corporate.calc.common.bottomUpKe"), value: pct(derived.bottomUpKe), source: t("corporate.calc.hurdle.realtimeHurdle") },
       ],
       components: [
-        { label: t("corporate.calc.shared.riskFreeRate"), value: pct(riskFreeRate), source: t("corporate.calc.hurdle.fredMacro") },
+        { label: t("corporate.calc.shared.riskFreeRate"), value: pct(riskFreeRate), source: t("corporate.calc.hurdle.fredMacro", { source: riskFreeSourceLine }) },
         { label: t("corporate.calc.hurdle.betaErp"), value: pct(derived.leveredBeta * equityRiskPremium), source: t("corporate.calc.hurdle.betaErpComponent", { beta: numberText2(derived.leveredBeta), erp: pct(equityRiskPremium) }) },
         { label: "CRP", value: pct(koreaCountryRiskPremium), source: t("corporate.calc.hurdle.crpComponentSource") },
       ],

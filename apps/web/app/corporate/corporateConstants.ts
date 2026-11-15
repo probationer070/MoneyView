@@ -20,12 +20,8 @@ export const COMPANIES: CorporateCompany[] = [
 
 export const EMPTY_WATCHLIST_HOLDINGS: WatchlistHolding[] = [];
 export const TAX_RATE = 0.25;
-export const RISK_FREE_RATE = 4.2;
-export const KOREA_COUNTRY_RISK_PREMIUM = 0.8;
-// The ERP and fallback tax rate the backend WACC uses (corporate_statement_metrics.py
-// DEFAULT_EQUITY_RISK_PREMIUM, core_finance DEFAULT_TAX_RATE): the Ke card must be the WACC's Ke
-// (plan 2026-11-02-corporate-explainers §6.3).
-export const EQUITY_RISK_PREMIUM = 5.5;
+// rf, ERP and CRP come from the server (`metrics.assumptions`, plan 2026-11-16-wacc-ke-live-premia S3a).
+// The fallback tax rate is the one core_finance DEFAULT_TAX_RATE uses.
 export const FALLBACK_TAX_RATE = 0.21;
 export const IMPLIED_ERP_FALLBACK_INDEX_LEVEL = 100;
 export const IMPLIED_ERP_DIVIDEND_YIELD = 1.4;

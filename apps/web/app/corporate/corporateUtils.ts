@@ -7,12 +7,12 @@ import type {
 } from "../../../../packages/shared-types";
 import {
   COMPANIES,
-  KOREA_COUNTRY_RISK_PREMIUM,
   TAX_RATE,
   initialAssumptions,
 } from "./corporateConstants";
 import type {
   AnnualMetricPoint,
+  AssumptionsApi,
   CorporateAssumptions,
   CorporateCompany,
   CorporateMetricsApi,
@@ -185,7 +185,8 @@ export function defaultAssumptionsFor(ticker: string, companies: CorporateCompan
     ...initialAssumptions,
     ticker,
     ...generatedDefaultsFor(company, ticker),
-    crp: KOREA_COUNTRY_RISK_PREMIUM,
+    // CRP is the server's: NaN (a dash) until metrics carry it.
+    crp: Number.NaN,
     reinvestment: Number((24 + (seed % 36)).toFixed(1)),
     fcff: Number((45 + (seed % 140)).toFixed(1)),
     innovation: Number((48 + (seed % 45)).toFixed(1)),
@@ -201,6 +202,16 @@ export function defaultAssumptionsFor(ticker: string, companies: CorporateCompan
 function percentText(value: number, digits: number) {
   const text = formatNumber(value, "ratio", { digits });
   return text === MISSING ? text : `${text}%`;
+}
+
+/** The server's rf/ERP/CRP for these metrics. `a` is null for saved or default metrics: nothing derived from rf/ERP is then shown. */
+export function readAssumptions(metrics: CorporateMetricsApi | null | undefined): { a: AssumptionsApi | null; refused: boolean } {
+  return { a: metrics?.assumptions ?? null, refused: Boolean(metrics?.wacc_refusal) };
+}
+
+/** "FRED DGS10, 2026-11-13": the source line of one echoed premium; a dash when the metrics carry no assumptions. */
+export function sourceLine(source: string | undefined, asOf: string | undefined) {
+  return source && asOf ? `${source}, ${asOf}` : MISSING;
 }
 
 export function pct(value: number) {
@@ -362,7 +373,7 @@ export function fromApiMetrics(metrics: CorporateMetricsApi): CorporateAssumptio
     debtRatio: metrics.debt_ratio,
     unleveredBeta: metrics.unlevered_beta,
     // The ticker's own premium, by reporting currency (plan 2026-11-02 §6.5).
-    crp: metrics.crp ?? KOREA_COUNTRY_RISK_PREMIUM,
+    crp: metrics.crp ?? metrics.assumptions?.crp ?? Number.NaN,
     reinvestment: metrics.reinvestment,
     fcff: metrics.fcff,
     innovation: metrics.innovation,

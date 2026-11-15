@@ -224,9 +224,11 @@ test.describe("the Ke card is the WACC's Ke", () => {
 
 test.describe("formulas when the beta is the WACC's", () => {
   const inputs = {
-    assumptions: { roic: 21.1, wacc: 7.3, reinvestment: 33.3, unleveredBeta: 0.61 },
+    assumptions: { roic: 21.1, wacc: 7.3, reinvestment: 33.3, unleveredBeta: 0.61, crp: 0.8 },
     derived: { spread: 13.8, bottomUpKe: 11.9, leveredBeta: 1.37, sustainableGrowth: 7.7, debtToEquity: 0.45, taxRate: 0.2, keFromWacc: true },
     impliedErp: 4.6,
+    riskFreeRate: 4.2,
+    equityRiskPremium: 5.5,
     impliedMarketReturn: 8.8,
     waccAudit: null,
     dcfData: null,

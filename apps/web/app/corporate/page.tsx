@@ -52,8 +52,6 @@ import {
   METRIC_HISTORY_CACHE_KEY,
   PRICE_HISTORY_CACHE_KEY,
   QUARTERLY_STATEMENTS_CACHE_KEY,
-  RISK_FREE_RATE,
-  EQUITY_RISK_PREMIUM,
   FALLBACK_TAX_RATE,
   STORAGE_KEY,
   initialAssumptions,
@@ -98,7 +96,9 @@ import {
   numberText2,
   pct,
   pct2,
+  readAssumptions,
   readSessionCache,
+  sourceLine,
   selectedMetricValue,
   solveImpliedMarketReturn,
   streamCorporateDcfSummary,
@@ -471,22 +471,28 @@ export default function CorporateAnalysisPage() {
     staleTime: 5 * 60_000,
   });
 
+  // rf/ERP/CRP are the server's (`metrics.assumptions`). Saved or default metrics carry none: NaN then
+  // renders as a dash and no figure derived from rf/ERP is shown (plan 2026-11-16 S3a).
+  const loadedMetrics = latestLoadedMetrics?.ticker?.trim().toUpperCase() === assumptions.ticker.trim().toUpperCase()
+    ? latestLoadedMetrics
+    : null;
+  const { a: serverAssumptions } = readAssumptions(loadedMetrics);
+  const riskFreeRate = serverAssumptions?.risk_free_rate ?? Number.NaN;
+  const equityRiskPremium = serverAssumptions?.equity_risk_premium ?? Number.NaN;
+
   const impliedErpInputs = useMemo<ImpliedErpInputs>(() => ({
     indexLevel: sp500Query.data?.at(-1)?.close ?? IMPLIED_ERP_FALLBACK_INDEX_LEVEL,
     dividendYield: IMPLIED_ERP_DIVIDEND_YIELD,
     buybackYield: IMPLIED_ERP_BUYBACK_YIELD,
     growthRates: IMPLIED_ERP_FIVE_YEAR_GROWTH,
-    stableGrowth: RISK_FREE_RATE,
-    riskFreeRate: RISK_FREE_RATE,
-  }), [sp500Query.data]);
+    stableGrowth: riskFreeRate,
+    riskFreeRate,
+  }), [sp500Query.data, riskFreeRate]);
 
   const impliedMarketReturn = useMemo(() => solveImpliedMarketReturn(impliedErpInputs), [impliedErpInputs]);
-  const impliedErp = Math.max(impliedMarketReturn - RISK_FREE_RATE, 0);
+  const impliedErp = Math.max(impliedMarketReturn - riskFreeRate, 0);
 
   // Derived metrics are the frontend valuation layer used by cards, charts, and detail modals.
-  const loadedMetrics = latestLoadedMetrics?.ticker?.trim().toUpperCase() === assumptions.ticker.trim().toUpperCase()
-    ? latestLoadedMetrics
-    : null;
   const derived = useMemo(() => {
     const debtToEquity = assumptions.debtRatio / Math.max(100 - assumptions.debtRatio, 1);
     const taxRate = loadedMetrics?.tax_rate ?? FALLBACK_TAX_RATE;
@@ -499,7 +505,7 @@ export default function CorporateAnalysisPage() {
       : assumptions.unleveredBeta * (1 + (1 - taxRate) * debtToEquity);
     const bottomUpKe = keFromWacc
       ? (loadedMetrics?.cost_of_equity as number)
-      : RISK_FREE_RATE + leveredBeta * EQUITY_RISK_PREMIUM + assumptions.crp;
+      : riskFreeRate + leveredBeta * equityRiskPremium + assumptions.crp;
     const spread = assumptions.roic - assumptions.wacc;
     const sustainableGrowth = (assumptions.reinvestment / 100) * assumptions.roic;
 
@@ -512,7 +518,7 @@ export default function CorporateAnalysisPage() {
       taxRate,
       keFromWacc,
     };
-  }, [assumptions, loadedMetrics]);
+  }, [assumptions, loadedMetrics, riskFreeRate, equityRiskPremium]);
 
   const comparisonQuery = useQuery<CorporateComparisonApi>({
     queryKey: [
@@ -818,8 +824,8 @@ export default function CorporateAnalysisPage() {
 
   // Chart datasets keep each visualization declarative and reuse the same derived model.
   const hurdleBars = [
-    { name: "Risk-free", value: RISK_FREE_RATE, fill: "var(--chart-4)" },
-    { name: "Beta x ERP", value: derived.leveredBeta * EQUITY_RISK_PREMIUM, fill: "var(--chart-1)" },
+    { name: "Risk-free", value: riskFreeRate, fill: "var(--chart-4)" },
+    { name: "Beta x ERP", value: derived.leveredBeta * equityRiskPremium, fill: "var(--chart-1)" },
     { name: "CRP", value: assumptions.crp, fill: "var(--ink)" },
   ];
 
@@ -888,8 +894,10 @@ export default function CorporateAnalysisPage() {
     sourceLabel,
     storageKey: STORAGE_KEY,
     taxRate: derived.taxRate,
-    equityRiskPremium: EQUITY_RISK_PREMIUM,
-    riskFreeRate: RISK_FREE_RATE,
+    equityRiskPremium,
+    riskFreeRate,
+    riskFreeSourceLine: sourceLine(serverAssumptions?.risk_free_source, serverAssumptions?.risk_free_as_of),
+    erpSourceLine: sourceLine(serverAssumptions?.erp_source, serverAssumptions?.erp_as_of),
     koreaCountryRiskPremium: assumptions.crp,
     growthBasisLabel,
     roicBasisLabel,
@@ -908,7 +916,7 @@ export default function CorporateAnalysisPage() {
   // A stale DCF's formula would mix the DCF's values with the inputs now on screen, so it is not shown.
   const dcfFormulaIsStale = dcfIsStale && (activeCalculation === "backendDcf" || activeCalculation === "backendFairValue");
   const activeSubstitutedFormula = activeCalculation && !dcfFormulaIsStale
-    ? substitutedFormula(activeCalculation, buildFormulaContext({ assumptions, derived, impliedErp, impliedMarketReturn, waccAudit: metricAuditQuery.data?.wacc ?? null, dcfData }))
+    ? substitutedFormula(activeCalculation, buildFormulaContext({ assumptions, derived, impliedErp, riskFreeRate, equityRiskPremium, impliedMarketReturn, waccAudit: metricAuditQuery.data?.wacc ?? null, dcfData }))
     : null;
   // The full report needs a DCF result to be on screen, and a refusal blocks it.
   const canLoadFullReport = dcfRefusal === null && !(!dcfData && dcfStreamStatus === "idle");
@@ -991,7 +999,7 @@ export default function CorporateAnalysisPage() {
               betaTreemapProxy={betaTreemapProxy}
               valueMatrix={valueMatrix}
               matrixPeerTickers={matrixPeerTickers}
-              growthReference={RISK_FREE_RATE}
+              growthReference={riskFreeRate}
               onOpenDetail={setActiveCalculation}
             />
           ),

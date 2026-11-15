@@ -1190,7 +1190,7 @@ export const ko: Messages = {
       bottomUpKe: {
         title: "{company} 상향식 Ke",
         timeHorizon: "WACC 안의 Ke입니다. 무위험수익률과 ERP는 모델 정책으로 고정하고, 국가위험프리미엄은 재무제표 통화에 따라 정하며, 베타는 WACC의 레버리지 베타를 씁니다.",
-        manualMacro: "수동 거시 가정",
+        manualMacro: "{source}",
         yahooBetaInWacc: "WACC 안에 쓴 Yahoo 베타",
         hamadaNoWacc: "Hamada 공식 (이 지표에는 WACC 베타가 없습니다)",
         equityRiskPremium: "주식위험프리미엄",
@@ -1201,7 +1201,7 @@ export const ko: Messages = {
         taxShield: "세금 방패",
         taxRateDetail: "1 - 세율 {tax}",
         betaFormula: "betaU x [1 + (1 - 세율) x D/E]",
-        policyErpSource: "모델 정책 입력, WACC와 같은 ERP",
+        policyErpSource: "{source}, WACC와 같은 ERP",
         debtRatioSource: "Yahoo 연간 재무상태표 부채비율을 2021년 이후 평균",
         unleveredBetaSource: "Yahoo 베타를 연간 재무제표 D/E와 세율의 평균으로 레버리지 제거",
         finalKe: "최종 상향식 Ke",
@@ -1245,7 +1245,7 @@ export const ko: Messages = {
       hurdle: {
         title: "{company} 허들레이트 분해",
         timeHorizon: "고정 모델 입력: 무위험수익률 4.2%, 그리고 고정된 현금수익률과 성장 경로에서 역산한 내재 ERP입니다. 회사 고유의 CRP는 재무제표 통화로 정합니다.",
-        fredMacro: "FRED / 거시 가정",
+        fredMacro: "{source}",
         crp: "CRP",
         expectedReturn: "기대 시장수익률 (IRR)",
         expectedReturnSource: "고정 모델: 첫해 현금수익률과 5년 성장 경로이며, 둘 다 상수입니다. 현금흐름이 지수에 비례해 움직이므로 지수 수준은 상쇄되고 시장에 따라 움직이지 않습니다",
@@ -1682,7 +1682,7 @@ export const ko: Messages = {
           stableGrowthSource: "장기 경제성장률 대용치로서의 무위험수익률",
           leveredBetaSource: "Hamada 베타 모델 | 기간: 5년 베타 기준과 현재 레버리지",
           riskFree: "무위험수익률",
-          riskFreeSource: "FRED / 거시 가정 | 기간: 현재 시장 스냅샷",
+          riskFreeSource: "{source} | 기간: 현재 시장 스냅샷",
         },
         sim: {
           solveIrr: "S&P 500 가격 {price}이 배당과 자사주 매입의 현재가치 및 잔존가치와 같아지는 IRR을 구합니다",
