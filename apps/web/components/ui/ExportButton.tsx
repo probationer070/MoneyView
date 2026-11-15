@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { fetchApi } from "@/lib/api";
 import { useT } from "@/lib/i18n/locale";
+import { ExportMenu, type ExportItem } from "@/components/ui/ExportMenu";
 import type { ReportExportFormatEnum, ReportExportResponse } from "../../../../packages/shared-types/generated/portfolio";
 
 interface ExportButtonProps {
@@ -136,36 +137,19 @@ export function ExportButton({
     );
   }
 
+  const exportItems: ExportItem[] = [
+    { key: "pdf", label: t("common.printPdf"), onSelect: exportPdf },
+    { key: "csv", label: t("common.exportCsv"), onSelect: exportCsv, separatorBefore: true },
+    { key: "json", label: t("common.exportJson"), onSelect: exportJson },
+    { key: "markdown", label: t("common.exportMarkdown"), onSelect: exportMarkdown },
+  ];
+
   return (
-    <div className="flex flex-wrap gap-2">
-      <button
-        onClick={exportJson}
-        disabled={isLoading}
-        className="whitespace-nowrap px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] hover:bg-[var(--surface)]"
-      >
-        {t("common.exportJson")}
-      </button>
-      <button
-        onClick={exportCsv}
-        disabled={isLoading}
-        className="whitespace-nowrap px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] hover:bg-[var(--surface)]"
-      >
-        {t("common.exportCsv")}
-      </button>
-      <button
-        onClick={exportMarkdown}
-        disabled={isLoading}
-        className="whitespace-nowrap px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] hover:bg-[var(--surface)]"
-      >
-        {t("common.exportMarkdown")}
-      </button>
-      <button
-        onClick={exportPdf}
-        disabled={isLoading}
-        className="whitespace-nowrap px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--brand)] text-[var(--on-brand)] hover:opacity-90"
-      >
-        {t("common.printPdf")}
-      </button>
-    </div>
+    <ExportMenu
+      items={exportItems}
+      label={t("common.export")}
+      busy={isLoading}
+      triggerClassName="inline-flex items-center gap-2 whitespace-nowrap px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] hover:bg-[var(--surface)]"
+    />
   );
 }

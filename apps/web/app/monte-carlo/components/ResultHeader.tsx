@@ -5,7 +5,7 @@ import { RollingNumber } from "@/components/ui/RollingNumber";
 import { formatNumber } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/locale";
 import { beforeText, type RunStatusView } from "../lib/resultModel";
-import { ExportMenu, type ExportItem } from "./ExportMenu";
+import { ExportMenu, type ExportItem } from "@/components/ui/ExportMenu";
 
 export type ResultFigure = {
   key: string;

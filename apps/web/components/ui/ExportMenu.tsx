@@ -1,13 +1,26 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { Fragment, useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ChevronDown, Download } from "lucide-react";
 import { useT } from "@/lib/i18n/locale";
 
-export type ExportItem = { key: string; label: string; onSelect: () => void };
+export type ExportItem = { key: string; label: string; onSelect: () => void; separatorBefore?: boolean };
 
-// One button that opens a menu of CSV exports. No items (no result yet) disables it.
-export function ExportMenu({ items }: { items: ExportItem[] }) {
+const DEFAULT_TRIGGER_CLASS =
+  "inline-flex h-[var(--component-button-height-sm)] items-center gap-1.5 rounded-[var(--radius-1)] border border-[var(--line-strong)] px-3 type-caption uppercase text-[var(--ink)] hover:border-[var(--brand)] hover:text-[var(--brand-text)] disabled:cursor-not-allowed disabled:border-[var(--grid)] disabled:text-[var(--ink-disabled)]";
+
+// One button that opens a menu. No items (no result yet) disables it. `busy` disables the items.
+export function ExportMenu({
+  items,
+  label,
+  triggerClassName = DEFAULT_TRIGGER_CLASS,
+  busy = false,
+}: {
+  items: ExportItem[];
+  label?: string;
+  triggerClassName?: string;
+  busy?: boolean;
+}) {
   const t = useT();
   const menuId = useId();
   const triggerId = useId();
@@ -75,10 +88,10 @@ export function ExportMenu({ items }: { items: ExportItem[] }) {
           setActive(0);
           setOpen((value) => !value);
         }}
-        className="inline-flex h-[var(--component-button-height-sm)] items-center gap-1.5 rounded-[var(--radius-1)] border border-[var(--line-strong)] px-3 type-caption uppercase text-[var(--ink)] hover:border-[var(--brand)] hover:text-[var(--brand-text)] disabled:cursor-not-allowed disabled:border-[var(--grid)] disabled:text-[var(--ink-disabled)]"
+        className={triggerClassName}
       >
         <Download aria-hidden="true" className="h-4 w-4" />
-        {t("monteCarlo.export.button")}
+        {label ?? t("monteCarlo.export.button")}
         <ChevronDown aria-hidden="true" className="h-4 w-4" />
       </button>
       {open ? (
@@ -90,21 +103,24 @@ export function ExportMenu({ items }: { items: ExportItem[] }) {
           className="absolute right-0 top-full z-20 mt-1 flex min-w-max flex-col border border-[var(--line)] bg-[var(--surface-raised)] py-1"
         >
           {items.map((item, index) => (
-            <button
-              key={item.key}
-              ref={(node) => { itemRefs.current[index] = node; }}
-              tabIndex={index === active ? 0 : -1}
-              type="button"
-              role="menuitem"
-              data-testid={`mc-export-${item.key}`}
-              onClick={() => {
-                item.onSelect();
-                close();
-              }}
-              className="px-4 py-2 text-left type-small text-[var(--ink)] hover:bg-[var(--surface)]"
-            >
-              {item.label}
-            </button>
+            <Fragment key={item.key}>
+              {item.separatorBefore ? <div role="separator" className="my-1 border-t border-[var(--line)]" /> : null}
+              <button
+                ref={(node) => { itemRefs.current[index] = node; }}
+                tabIndex={index === active ? 0 : -1}
+                type="button"
+                role="menuitem"
+                disabled={busy}
+                data-testid={`mc-export-${item.key}`}
+                onClick={() => {
+                  item.onSelect();
+                  close();
+                }}
+                className="px-4 py-2 text-left type-small text-[var(--ink)] hover:bg-[var(--surface)] disabled:cursor-not-allowed disabled:text-[var(--ink-disabled)]"
+              >
+                {item.label}
+              </button>
+            </Fragment>
           ))}
         </div>
       ) : null}
