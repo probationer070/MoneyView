@@ -1060,9 +1060,9 @@ export const ko: Messages = {
     },
     calc: {
       beta: {
-        one: "베타 1.00은 시장 수준의 변동성을 의미합니다.",
-        above: "베타 {beta}는 시장보다 약 {pct}% 높은 변동성을 나타냅니다.",
-        below: "베타 {beta}는 시장보다 약 {pct}% 낮은 변동성을 나타냅니다.",
+        one: "베타 1.00: 시장 수준의 변동성을 나타냅니다.",
+        above: "베타 {beta}: 시장보다 약 {pct}% 높은 변동성을 나타냅니다.",
+        below: "베타 {beta}: 시장보다 약 {pct}% 낮은 변동성을 나타냅니다.",
       },
       basis: {
         growthFallback: "안정 CAGR을 구할 수 없어 대체 가정을 사용하고 있습니다",

@@ -90,9 +90,9 @@ test("ko chart detail titles and labels for part B entries are Korean, and en ke
 });
 
 test("betaInterpretation is Korean under ko and keeps the original English under en and by default", () => {
-  expect(betaInterpretation(1.2, koT)).toBe("베타 1.20는 시장보다 약 20.0% 높은 변동성을 나타냅니다.");
-  expect(betaInterpretation(0.8, koT)).toBe("베타 0.80는 시장보다 약 20.0% 낮은 변동성을 나타냅니다.");
-  expect(betaInterpretation(1, koT)).toBe("베타 1.00은 시장 수준의 변동성을 의미합니다.");
+  expect(betaInterpretation(1.2, koT)).toBe("베타 1.20: 시장보다 약 20.0% 높은 변동성을 나타냅니다.");
+  expect(betaInterpretation(0.8, koT)).toBe("베타 0.80: 시장보다 약 20.0% 낮은 변동성을 나타냅니다.");
+  expect(betaInterpretation(1, koT)).toBe("베타 1.00: 시장 수준의 변동성을 나타냅니다.");
 
   expect(betaInterpretation(1.2)).toBe("Beta 1.20 implies about 20.0% higher volatility than the market.");
   expect(betaInterpretation(1, enT)).toBe("Beta 1.00 implies market-level volatility.");
