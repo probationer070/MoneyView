@@ -5,6 +5,8 @@ import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { useT } from "@/lib/i18n/locale";
 import { ResponsiveChart } from "@/components/ui/ResponsiveChart";
 import { GRID_STYLE, fmtPctTick, withAxisProps, withCategoryAxisProps, withTooltipProps } from "@/lib/chartConfig";
+import type { AssumptionsApi } from "../../corporateTypes";
+import { AssumptionSourceCaption, WaccRefusedNote } from "../AssumptionSourceCaption";
 import { type DetailKey, type HurdleBarPoint, pct } from "./shared";
 
 /**
@@ -13,9 +15,13 @@ import { type DetailKey, type HurdleBarPoint, pct } from "./shared";
  */
 export function HurdleRateDecompositionGraph({
   hurdleBars,
+  assumptionsEcho,
+  refusedMissing,
   onOpenDetail,
 }: {
   hurdleBars: HurdleBarPoint[];
+  assumptionsEcho: AssumptionsApi | null;
+  refusedMissing: string[] | null;
   onOpenDetail: (key: DetailKey) => void;
 }) {
   const t = useT();
@@ -37,6 +43,10 @@ export function HurdleRateDecompositionGraph({
           </button>
         </div>
       </div>
+      {refusedMissing ? (
+        <div className="mt-3"><WaccRefusedNote missing={refusedMissing} /></div>
+      ) : (
+      <>
       <div className="h-56 min-h-56 min-w-0">
         <ResponsiveChart className="h-full w-full" minWidth={1} minHeight={1}>
           <BarChart data={hurdleBars} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
@@ -71,6 +81,9 @@ export function HurdleRateDecompositionGraph({
         ))}
       </div>
       <p className="type-small mt-2 text-[var(--ink)]">Total (sum of the three): {pct(componentSum)}</p>
+      <div className="mt-1"><AssumptionSourceCaption assumptions={assumptionsEcho} /></div>
+      </>
+      )}
     </div>
   );
 }

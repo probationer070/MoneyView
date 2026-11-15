@@ -62,7 +62,8 @@ export interface CorporateMetricsApi {
   roic: number;
   roic_legacy?: number | null;
   roic_stable_v2?: number | null;
-  wacc: number;
+  /** Null when the server refused the WACC (`wacc_refusal`). */
+  wacc: number | null;
   debt_ratio: number;
   unlevered_beta: number;
   /** The tax rate the beta was unlevered with; null for saved or default metrics. */

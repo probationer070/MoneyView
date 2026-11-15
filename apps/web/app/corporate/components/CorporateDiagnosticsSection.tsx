@@ -6,7 +6,7 @@ import { fetchApi } from "@/lib/api";
 import { useT } from "@/lib/i18n/locale";
 import { BetaWaccCurveGraph, HurdleRateDecompositionGraph, ValueDriverMatrixGraph } from "./CorporateGraphs";
 import type { BetaPoint, DetailKey, HurdleBarPoint, ValueMatrixPoint } from "./graphs/shared";
-import type { CorporateMetricsApi } from "../corporateTypes";
+import type { AssumptionsApi, CorporateMetricsApi } from "../corporateTypes";
 
 // Spec §3.1: three charts in one row (2 below 992px, 1 below 768px). DCF Core Modules moved to
 // the DCF tab; the explanatory box became this tab's ⓘ.
@@ -17,6 +17,8 @@ export function CorporateDiagnosticsSection({
   valueMatrix,
   matrixPeerTickers,
   growthReference,
+  assumptionsEcho,
+  refusedMissing,
   onOpenDetail,
 }: {
   companyName: string;
@@ -26,6 +28,9 @@ export function CorporateDiagnosticsSection({
   /** Same-sector watchlist tickers whose metrics become the matrix's comparison points. */
   matrixPeerTickers: string[];
   growthReference: number;
+  assumptionsEcho: AssumptionsApi | null;
+  /** `wacc_refusal.missing` when the server refused the WACC; null otherwise. */
+  refusedMissing: string[] | null;
   onOpenDetail: (key: DetailKey) => void;
 }) {
   const t = useT();
@@ -37,11 +42,11 @@ export function CorporateDiagnosticsSection({
       staleTime: 5 * 60_000,
     })),
   });
-  const peerPoints: ValueMatrixPoint[] = peerQueries.flatMap((query) => (query.data
+  const peerPoints: ValueMatrixPoint[] = peerQueries.flatMap((query) => (query.data && query.data.wacc != null
     ? [{
       name: query.data.ticker,
       growth: query.data.growth,
-      spread: query.data.roic - query.data.wacc,
+      spread: query.data.roic - (query.data.wacc as number),
       efficiency: 0,
       fcff: query.data.fcff,
     }]
@@ -52,7 +57,7 @@ export function CorporateDiagnosticsSection({
         <InfoTooltip label={t("corporate.tabs.about")} description={t("corporate.tabs.diagnosticsAbout")} />
       </span>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <HurdleRateDecompositionGraph hurdleBars={hurdleBars} onOpenDetail={onOpenDetail} />
+        <HurdleRateDecompositionGraph hurdleBars={hurdleBars} assumptionsEcho={assumptionsEcho} refusedMissing={refusedMissing} onOpenDetail={onOpenDetail} />
         <BetaWaccCurveGraph betaTreemapProxy={betaTreemapProxy} onOpenDetail={onOpenDetail} />
         <ValueDriverMatrixGraph companyName={companyName} valueMatrix={[...valueMatrix, ...peerPoints]} growthReference={growthReference} onOpenDetail={onOpenDetail} />
       </div>

@@ -84,6 +84,7 @@ interface WatchlistCoverage {
 
 export function TargetStockComparisonSection({
   comparisonData,
+  comparisonRefusalMissing,
   comparisonDisplayLastUpdatedAt,
   comparisonIsStale,
   comparisonUniverse,
@@ -125,6 +126,8 @@ export function TargetStockComparisonSection({
   formatDateTime,
 }: {
   comparisonData: ComparisonData | null;
+  /** `wacc_refusal.missing` when the route answered "assumptions_missing" instead of rows; null otherwise. */
+  comparisonRefusalMissing: string[] | null;
   comparisonDisplayLastUpdatedAt: string | null;
   comparisonIsStale: boolean;
   comparisonUniverse: ComparisonUniverse;
@@ -300,7 +303,12 @@ export function TargetStockComparisonSection({
 
       {comparisonIsLoading && !comparisonData ? <LoadingState variant="spinner" label={t("corporate.comparison.loading")} /> : null}
       {comparisonIsError ? <ErrorState title={t("corporate.comparison.errorTitle")} message={t("corporate.comparison.errorBody")} /> : null}
-      {!comparisonData && !comparisonIsFetching && !comparisonIsError ? (
+      {comparisonRefusalMissing ? (
+        <p data-testid="comparison-refused" className="type-body text-[var(--ink-secondary)]">
+          {t("corporate.assumptions.missing.reason", { missing: comparisonRefusalMissing.join(", ") })}
+        </p>
+      ) : null}
+      {!comparisonData && !comparisonRefusalMissing && !comparisonIsFetching && !comparisonIsError ? (
         <EmptyState title={t("corporate.comparison.idleTitle")} description={t("corporate.comparison.idleBody")} />
       ) : null}
 

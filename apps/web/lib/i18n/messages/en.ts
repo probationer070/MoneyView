@@ -260,6 +260,7 @@ export const en = {
       no_segments: "There is no business segment to value.",
       non_positive_target_capital: "The target-year capital is zero or negative, so the marginal return cannot be weighted.",
       rate_schedule_length_mismatch: "The per-year tax rate schedule does not have one rate for each forecast year.",
+      assumptions_missing: "No risk-free rate or equity risk premium is on file, so nothing is valued. Enter one under Market assumptions.",
       wacc_not_above_growth: "The discount rate does not exceed the growth rate, so the Gordon growth value is undefined.",
       non_positive_shares: "The diluted share count is zero or negative, so no value per share can be set.",
       conflicting_share_inputs: "New shares and an offering price were both given, but only one can set the new share count.",
@@ -958,6 +959,12 @@ export const en = {
       sourceIdle: "Source data stays idle on first load until refreshed.",
       staleSource: "Cached source data is for {cached}. Refresh for {ticker}.",
       fixed: "Fixed", auditUncertain: "Audit uncertain",
+      missing: {
+        title: "WACC unavailable",
+        reason: "No risk-free rate or equity risk premium is on file ({missing}). Enter one under Market assumptions.",
+      },
+      stale: { risk_free: "Risk-free rate is older than the limit", erp: "ERP is older than 120 days" },
+      source: { caption: "Risk-free: {rfSource}, {rfAsOf} · ERP: {erpSource}, {erpAsOf}" },
     },
     assumption: {
       growth: "Growth Rate", roic: "ROIC", wacc: "WACC", debtRatio: "Debt Ratio", unleveredBeta: "Unlevered Beta",

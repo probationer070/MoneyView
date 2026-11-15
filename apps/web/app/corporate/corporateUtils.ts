@@ -1,5 +1,5 @@
 import { getApiBaseUrl } from "@/lib/api";
-import { readDcfRefusal } from "@/lib/dcfRefusal";
+import { DcfRefusalError, readDcfRefusal } from "@/lib/dcfRefusal";
 import { formatNumber, MISSING } from "@/lib/format";
 import type {
   DcfAssumptionSummary as DCFAssumptionSummary,
@@ -68,7 +68,8 @@ export function dcfRequestBody(snapshot: DcfRequestSnapshot) {
   return {
     revenue_growth_rate: snapshot.growth / 100,
     operating_margin: clamp(snapshot.roic / 100, -1, 1),
-    wacc: snapshot.wacc / 100,
+    // A refused WACC (NaN) still needs a number the request schema accepts; the route refuses before it is used.
+    wacc: Number.isFinite(snapshot.wacc) ? snapshot.wacc / 100 : 0.1,
     tax_rate: TAX_RATE,
     // terminal_growth_rate omitted on purpose: the API derives it from revenue growth
     // with the long-run ceiling (H8). Sending growth here valued ~96% as terminal value.
@@ -109,6 +110,11 @@ export async function streamCorporateDcfSummary(
 
   const refusal = await readDcfRefusal(response);
   if (refusal) throw refusal;
+  // No rf/ERP: HTTP 200 JSON {status: "unavailable", reason} instead of an event stream (plan 2026-11-16 section 2).
+  if (response.ok && (response.headers.get("content-type") ?? "").includes("application/json")) {
+    const body = await response.json();
+    if (body?.status === "unavailable" && typeof body.reason === "string") throw new DcfRefusalError(body.reason, body.reason);
+  }
   if (!response.ok || !response.body) {
     throw new Error(`DCF stream failed: ${response.status}`);
   }
@@ -369,7 +375,7 @@ export function fromApiMetrics(metrics: CorporateMetricsApi): CorporateAssumptio
     ticker: metrics.ticker,
     growth: metrics.growth,
     roic: metrics.roic,
-    wacc: metrics.wacc,
+    wacc: metrics.wacc ?? Number.NaN,
     debtRatio: metrics.debt_ratio,
     unleveredBeta: metrics.unlevered_beta,
     // The ticker's own premium, by reporting currency (plan 2026-11-02 §6.5).

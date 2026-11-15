@@ -282,9 +282,9 @@ export const mockMetricAudit = (ticker: string): CorporateMetricAudit => ({
     as_of: "2025-12-31",
     calculation_version: "wacc_v2_latest_capital_structure",
     inputs_used: [
-      { field: "risk_free_rate", label: "Risk-free rate", value: 0.042, display_value: "4.2%", source: "Model policy input" },
+      { field: "risk_free_rate", label: "Risk-free rate", value: 0.042, display_value: "4.2%", source: "owner, 2026-11-16" },
       { field: "beta", label: "Beta", value: 1.12, display_value: "1.12", source: "Yahoo Finance statement bundle plus market profile" },
-      { field: "equity_risk_premium", label: "Equity risk premium", value: 0.055, display_value: "5.5%", source: "Model policy input" },
+      { field: "equity_risk_premium", label: "Equity risk premium", value: 0.055, display_value: "5.5%", source: "owner, 2026-11-16" },
       { field: "final_wacc_value", label: "Final WACC value", value: ticker === "MSFT" ? 9 : 10, display_value: ticker === "MSFT" ? "9.0%" : "10.0%", source: "Weighted capital costs" },
     ],
   },

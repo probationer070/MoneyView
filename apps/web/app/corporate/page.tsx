@@ -476,7 +476,8 @@ export default function CorporateAnalysisPage() {
   const loadedMetrics = latestLoadedMetrics?.ticker?.trim().toUpperCase() === assumptions.ticker.trim().toUpperCase()
     ? latestLoadedMetrics
     : null;
-  const { a: serverAssumptions } = readAssumptions(loadedMetrics);
+  const { a: serverAssumptions, refused: waccRefused } = readAssumptions(loadedMetrics);
+  const refusedMissing = waccRefused ? loadedMetrics?.wacc_refusal?.missing ?? [] : null;
   const riskFreeRate = serverAssumptions?.risk_free_rate ?? Number.NaN;
   const equityRiskPremium = serverAssumptions?.equity_risk_premium ?? Number.NaN;
 
@@ -506,7 +507,7 @@ export default function CorporateAnalysisPage() {
     const bottomUpKe = keFromWacc
       ? (loadedMetrics?.cost_of_equity as number)
       : riskFreeRate + leveredBeta * equityRiskPremium + assumptions.crp;
-    const spread = assumptions.roic - assumptions.wacc;
+    const spread = waccRefused ? Number.NaN : assumptions.roic - assumptions.wacc;
     const sustainableGrowth = (assumptions.reinvestment / 100) * assumptions.roic;
 
     return {
@@ -518,7 +519,7 @@ export default function CorporateAnalysisPage() {
       taxRate,
       keFromWacc,
     };
-  }, [assumptions, loadedMetrics, riskFreeRate, equityRiskPremium]);
+  }, [assumptions, loadedMetrics, riskFreeRate, equityRiskPremium, waccRefused]);
 
   const comparisonQuery = useQuery<CorporateComparisonApi>({
     queryKey: [
@@ -572,7 +573,9 @@ export default function CorporateAnalysisPage() {
   const dcfFullReportForTicker = normalizeSourceTicker(dcfFullReport?.summary.ticker) === sourceDataTicker ? dcfFullReport : null;
   // A refusal supersedes any cached value, including one computed under the old FCFF floor.
   const dcfDisplayData = dcfRefusal ? null : dcfStreamForTicker ?? dcfCachedForTicker?.result ?? null;
-  const comparisonDisplayData = comparisonQuery.data ?? comparisonCachedResult;
+  // The route answers HTTP 200 {status: "unavailable", wacc_refusal} when rf/ERP are missing (plan 2026-11-16 section 2): no rows, a reason.
+  const comparisonRefusalMissing = (comparisonQuery.data as { wacc_refusal?: { missing: string[] } } | undefined)?.wacc_refusal?.missing ?? null;
+  const comparisonDisplayData = comparisonRefusalMissing ? null : comparisonQuery.data ?? comparisonCachedResult;
   const rawMetricsHistoryData = metricsHistoryQuery.data ?? cachedMetricsHistory;
   const rawQuarterlyStatementsData = quarterlyStatementsQuery.data ?? cachedQuarterlyStatements;
   const rawHistoricalPricesData = historicalPricesQuery.data ?? cachedHistoricalPrices ?? [];
@@ -669,7 +672,7 @@ export default function CorporateAnalysisPage() {
   }, [dcfRefreshToken, dcfRequestedSnapshot]);
 
   useEffect(() => {
-    if (!comparisonQuery.data || !comparisonRequestedSnapshot) return;
+    if (!comparisonQuery.data || !comparisonRequestedSnapshot || comparisonRefusalMissing) return;
     const lastUpdatedAt = new Date(comparisonQuery.dataUpdatedAt).toISOString();
     const cacheValue: CachedCalculation<ComparisonRequestSnapshot, CorporateComparisonApi> = {
       snapshot: comparisonRequestedSnapshot,
@@ -677,7 +680,7 @@ export default function CorporateAnalysisPage() {
       lastUpdatedAt,
     };
     writeSessionCache(COMPARISON_CACHE_KEY, cacheValue);
-  }, [comparisonQuery.data, comparisonQuery.dataUpdatedAt, comparisonRequestedSnapshot]);
+  }, [comparisonQuery.data, comparisonQuery.dataUpdatedAt, comparisonRequestedSnapshot, comparisonRefusalMissing]);
 
   useEffect(() => {
     if (!metricsHistoryQuery.data || !sourceDataRequestedTicker) return;
@@ -958,6 +961,8 @@ export default function CorporateAnalysisPage() {
                   bottomUpKe={derived.bottomUpKe}
                   wacc={assumptions.wacc}
                   leveredBeta={derived.leveredBeta}
+                  refusedMissing={refusedMissing}
+                  assumptionsEcho={serverAssumptions}
                   onOpenDetail={setActiveCalculation}
                 />
                 <RelativePricingCard ticker={sourceDataTicker} />
@@ -1000,6 +1005,8 @@ export default function CorporateAnalysisPage() {
               valueMatrix={valueMatrix}
               matrixPeerTickers={matrixPeerTickers}
               growthReference={riskFreeRate}
+              assumptionsEcho={serverAssumptions}
+              refusedMissing={refusedMissing}
               onOpenDetail={setActiveCalculation}
             />
           ),
@@ -1019,6 +1026,7 @@ export default function CorporateAnalysisPage() {
           comparison: (
             <TargetStockComparisonSection
               comparisonData={comparisonData}
+              comparisonRefusalMissing={comparisonRefusalMissing}
               comparisonDisplayLastUpdatedAt={comparisonDisplayLastUpdatedAt}
               comparisonIsStale={comparisonIsStale}
               comparisonUniverse={comparisonUniverse}
