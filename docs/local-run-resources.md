@@ -206,3 +206,35 @@ each PC downloads its own. Design: `docs/superpowers/specs/2026-09-20-records-pe
 
 Test and e2e processes set `MONEYVIEW_SKIP_LOCAL_ENV=1`, so they never read `config/.env` and
 never touch your real sync folder.
+
+### How sync behaves between two PCs (owner-confirmed 2026-11-16)
+
+- **The two PCs do not need to be on at the same time.** Each PC leaves its own file in the
+  OneDrive folder; the file stays in the cloud after that PC is off. The other PC reads it the
+  next time MoneyView syncs there (startup, opening the Events/Decisions/Valuation pages, or any
+  save). Example: Monday evening PC A adds an event and is turned off; Tuesday morning PC B starts
+  MoneyView and the event appears. The PCs were never on together.
+- **The one condition: after a change on a PC, leave it on until OneDrive finishes uploading**
+  (the OneDrive icon shows "Up to date", usually seconds to a few minutes). If it is turned off
+  before that, the change reaches the other PC only after the first PC is on again and the upload
+  completes. OneDrive must run on both PCs (it runs in the background with Windows).
+- **A record is saved to the local DB the moment it is added.** Closing the shell or killing
+  MoneyView afterwards does not lose it, and the sync file is written in the same request (written
+  to a temp file and renamed, so a kill never leaves half a file). Only a kill during the save
+  request itself (under a second) can lose that one change.
+- **A page already open does not refresh by itself.** If PC B has the Events page open while PC A
+  adds an event, reload or revisit the page.
+- **The path is per PC.** `MONEYVIEW_SYNC_DIR` contains the Windows user name, which differs
+  between PCs (e.g. `C:\Users\VIP\OneDrive\MoneyView-sync` on one, `C:\Users\eajwa\...` on the
+  other). Do not copy `config/.env` between PCs unchanged: on 2026-11-16 one PC carried the other
+  PC's path, the folder did not exist there, and that PC never synced. The same folder NAME must
+  be used on both; only the user-name part differs.
+- **Never put `moneyview.db` itself in OneDrive** (do not point `DB_PATH` there). SQLite keeps
+  recent writes in `moneyview.db-wal`; OneDrive can upload the `.db` without them or while the app
+  holds the file open, so the other PC opens a stale database, and two PCs writing it produce a
+  conflict copy whose changes look lost. Each PC keeps its own DB; only the small JSON files go
+  through OneDrive.
+- **Check sync:** `GET http://127.0.0.1:8000/api/v1/sync/status` shows `enabled`, `peers` (the
+  other PC and its last write time), `last_sync_at` and `last_error` (e.g. "sync folder ... does
+  not exist"). In the folder, `MoneyView\records.<pc_id>.json` for each PC should exist and its
+  time should change when you add something.
