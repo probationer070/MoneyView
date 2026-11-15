@@ -26,6 +26,16 @@ reveal that; only checking the code did.
 
 An entry states what was true when it was written. Nothing updates it on its own.
 
+## 2026-11-15: the top nav's current-page underline was a box-shadow (paper-sweep failed on every route)
+
+Date: 2026-11-15
+Command: `npx playwright test` (full suite, after the nav/portfolio redesign)
+Failure: `paper-sweep.spec.ts` "only token colours, redesign radii, no shadows" failed on all 10 routes: `a.group.flex.h-8 box-shadow: ... rgb(250, 54, 0) 0px -2px 0px 0px inset`.
+Root cause: db0b781 drew the current page's 2px brand underline in `TopNav.tsx` with `shadow-[inset_0_-2px_0_var(--brand)]`. The design forbids shadows; the task's spec list ran topnav but not paper-sweep, which is the check that knows the rule.
+Fix: 6636fd9 draws it as `border-b-2` (brand on the current link, transparent on the others); the topnav assertion checks border-bottom colour and `box-shadow: none`.
+Files changed: `apps/web/components/ui/TopNav.tsx`, `apps/web/tests/e2e/topnav.spec.ts`.
+Prevention: a change to a shared surface (`components/ui/**`) runs the full suite (HARNESS test scope); for a visual change to the top bar, run `paper-sweep.spec.ts` with the task's specs.
+
 ## 2026-11-15: refresh-idle-state test used a code that now has reader wording
 
 Date: 2026-11-15
