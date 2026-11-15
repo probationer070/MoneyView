@@ -117,11 +117,13 @@ interface StockTileGridProps {
   onToggleFollow: (stock: PortfolioStock) => void;
   /** Rendered right after the grid-count line, inside the same header row. */
   statusSlot?: ReactNode;
+  /** Renders the visible stocks as a table instead of tiles; the filter and search above are shared. */
+  renderTable?: (visible: PortfolioStock[]) => ReactNode;
 }
 
 export function StockTileGrid({
   stocks, newsByTicker, filter, onFilterChange, search, onSearchChange, onOpenStock,
-  followedGroup, unfollowedGroup, onToggleFollow, statusSlot,
+  followedGroup, unfollowedGroup, onToggleFollow, statusSlot, renderTable,
 }: StockTileGridProps) {
   const groups = useMemo(() => availableGroups(stocks), [stocks]);
 
@@ -181,9 +183,11 @@ export function StockTileGrid({
 
       {visible.length === 0 ? (
         <EmptyState
-          title="No stocks in this group"
+          title={stocks.length === 0 ? "No Holdings Yet" : "No stocks in this group"}
           description="Follow a stock with the + on its tile in All, or switch the filter to All."
         />
+      ) : renderTable ? (
+        renderTable(visible)
       ) : (
         <div
           data-testid="stock-tile-grid"

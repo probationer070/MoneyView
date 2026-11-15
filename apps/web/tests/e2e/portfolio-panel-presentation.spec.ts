@@ -82,17 +82,15 @@ test.describe("ko portfolio", () => {
     await expect(page.getByTestId("stock-tile-AAPL")).toContainText("20.0%");
   });
 
-  // P3: the "현재가" column header is in the Stocks tab's table view, which P3 adds.
-  test.fixme("a table header follows the Korean locale", async ({ page }) => {
+  test("a table header follows the Korean locale", async ({ page }) => {
     await mockPortfolioPageApi(page);
     await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: "Table", exact: true }).click();
+    await page.getByRole("button", { name: "표", exact: true }).click();
     await expect(page.getByRole("tabpanel").getByRole("columnheader", { name: "현재가", exact: true }).first()).toBeVisible();
   });
 });
 
-// P3: the Stocks tab gets its card/table toggle there; this test is re-enabled with it.
-test.fixme("the holdings table fits the panel at 1280px with no horizontal scroll and shows change in the price cell", async ({ page }) => {
+test("the holdings table fits the panel at 1280px with no horizontal scroll and shows change in the price cell", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await mockPortfolioPageApi(page);
   await gotoGrid(page);

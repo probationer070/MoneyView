@@ -37,6 +37,7 @@ import { PortfolioAllocationEditor } from "./components/PortfolioAllocationEdito
 import { PortfolioCommandCenter } from "./components/PortfolioCommandCenter";
 import { PortfolioGuide } from "./components/PortfolioGuide";
 import { PortfolioShell } from "./components/PortfolioShell";
+import { StockViewToggle, type StocksView } from "./components/StockViewToggle";
 import { resolveGroupFilter, selectVisibleStocks, StockTileGrid, type GridFilter } from "./components/StockTileGrid";
 import { WatchlistPeerSyncStatus, type WatchlistPeerSyncStatusData } from "./components/WatchlistPeerSyncStatus";
 import { tabStateKey, useTabState } from "@/lib/tabState";
@@ -472,15 +473,16 @@ function HoldingsTable({
   watchlist,
   comparisonMetricsByTicker,
   onSelect,
-  onDelete,
-  deletingTicker,
+  followedGroup,
+  onToggleFollow,
 }: {
   watchlist: PortfolioStock[];
   comparisonMetricsByTicker: Record<string, PortfolioTickerMetrics>;
   onSelect: (stock: PortfolioStock) => void;
-  onDelete: (stock: PortfolioStock) => void;
-  deletingTicker?: string | null;
+  followedGroup: string;
+  onToggleFollow: (stock: PortfolioStock) => void;
 }) {
+  const t = useT();
   return (
     <section className="overflow-x-auto border border-[var(--line)] bg-[var(--surface-raised)]">
       <div className="border-b border-[var(--line)] bg-[var(--surface)] px-4 py-2 type-small text-[var(--ink-muted)] sm:hidden">
@@ -498,13 +500,14 @@ function HoldingsTable({
             <th className="px-2 py-3 text-right type-caption">Implied return vs WACC (pts per year)</th>
             <th className="hidden px-2 py-3 text-right md:table-cell type-caption"><BilingualLabel k="volatility" /></th>
             <th className="hidden px-2 py-3 text-right lg:table-cell type-caption"><BilingualLabel k="weight" /></th>
-            <th className="hidden px-2 py-3 text-right lg:table-cell type-caption"><BilingualLabel k="action" /></th>
+            <th className="px-2 py-3 text-center type-caption">{t("portfolio.view.follow")}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-[var(--grid)]">
           {watchlist.map((stock) => {
             const deltaPct = stock.delta?.delta_pct ?? 0;
             const metrics = comparisonMetricsByTicker[stock.ticker] ?? EMPTY_COMPARISON_METRICS;
+            const followed = stock.group_name === followedGroup;
             return (
               <tr
                 key={stock.ticker}
@@ -546,18 +549,20 @@ function HoldingsTable({
                 <td className="hidden px-2 py-3 text-right tabular-nums lg:table-cell">
                   {formatWeightPercent(stock.weight)}
                 </td>
-                <td className="hidden px-2 py-3 text-right lg:table-cell">
+                <td className="px-2 py-3 text-center">
                   <button
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      onDelete(stock);
+                      onToggleFollow(stock);
                     }}
-                    disabled={deletingTicker === stock.ticker}
-                    className="inline-flex items-center gap-1 rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-1 type-small text-[var(--ink-muted)] hover:text-[var(--down)] disabled:opacity-50"
+                    aria-pressed={followed}
+                    aria-label={followed ? `Unfollow ${stock.ticker}` : `Follow ${stock.ticker}`}
+                    title={followed ? "Followed — click to remove" : "Follow this stock"}
+                    data-testid={`table-follow-${stock.ticker}`}
+                    className={`inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-1)] type-body transition-colors ${followed ? "text-[var(--brand-text)]" : "text-[var(--ink-muted)] hover:text-[var(--ink)]"}`}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    {deletingTicker === stock.ticker ? "Removing" : "Remove"}
+                    {followed ? "★" : "☆"}
                   </button>
                 </td>
               </tr>
@@ -887,6 +892,7 @@ export default function PortfolioPage() {
   const weightInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   // Which page tab is showing. Owned here rather than inside PortfolioShell so page actions
   // can switch tabs programmatically, not just on a click. Restored per session like the grid filter.
+  const [stocksView, setStocksView] = useTabState<StocksView>(tabStateKey("portfolio", "stocksView"), "cards");
   const [storedTab, setActiveTab] = useTabState<string>(tabStateKey("portfolio", "tab"), "stocks");
   const activeTab = ["stocks", "weights", "attribution"].includes(storedTab) ? storedTab : "stocks";
   // A pending scroll/focus request against the allocation panel. SidePanel renders null
@@ -2203,6 +2209,15 @@ export default function PortfolioPage() {
           search={gridSearch}
           onSearchChange={setGridSearch}
           onOpenStock={openStockDetail}
+          renderTable={stocksView === "table" ? (visible) => (
+            <HoldingsTable
+              watchlist={visible}
+              comparisonMetricsByTicker={comparisonMetricsByTicker}
+              onSelect={openStockDetail}
+              followedGroup={FOLLOWED_GROUP}
+              onToggleFollow={(stock) => toggleFollow.mutate(stock)}
+            />
+          ) : undefined}
           statusSlot={<WatchlistPeerSyncStatus status={peerSyncQuery.data} />}
         />
         </>
@@ -2222,6 +2237,7 @@ export default function PortfolioPage() {
         tabsLabel={t("portfolio.tabs.label")}
         activeTab={activeTab}
         onTabChange={setActiveTab}
+        tabsAside={activeTab === "stocks" ? <StockViewToggle value={stocksView} onChange={setStocksView} /> : null}
         panels={{ stocks: stocksPanel, weights: allocationPanelBody, attribution: attributionPanelBody }}
       >
         <div className="px-4 pt-4">

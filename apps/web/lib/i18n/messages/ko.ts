@@ -23,6 +23,7 @@ export const ko: Messages = {
   portfolio: {
     title: "포트폴리오",
     tabs: { label: "포트폴리오 보기", stocks: "종목", weights: "비중", attribution: "성과 기여" },
+    view: { label: "보기 방식", cards: "카드", table: "표", follow: "관심" },
     guide: {
       about: {
         title: "이 화면은",

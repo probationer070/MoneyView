@@ -13,7 +13,9 @@ async function gotoPortfolio(page: Page) {
 }
 
 function removeButtons(page: Page) {
-  return page.locator("button").filter({ hasText: /^Remove$/ });
+  // Per-row Remove buttons are gone (D6); delete lives in the stock detail modal. What this
+  // counted was the holdings, so it counts their tiles or, in table view, their rows.
+  return page.getByRole("tabpanel").locator('[data-testid^="stock-tile-cell-"], tbody tr');
 }
 
 async function clearAllHoldings(page: Page) {
@@ -367,6 +369,7 @@ test("portfolio table prioritizes comparison columns on mobile", async ({ page }
   await mockPortfolioPageApi(page);
   await gotoPortfolio(page);
   await openPortfolioPanel(page, "holdings");
+  await page.getByRole("button", { name: "Table", exact: true }).click();
 
   await expect(page.getByText(/Mobile view keeps the core comparison columns visible first\./).first()).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "ROIC - WACC", exact: true }).first()).toBeVisible();

@@ -18,13 +18,15 @@ interface PortfolioShellProps {
    */
   activeTab: string;
   onTabChange: (key: string) => void;
+  /** Sits at the right end of the tab row, e.g. a view toggle that belongs to one tab. */
+  tabsAside?: ReactNode;
   /** Only the active tab's content is mounted. */
   panels: Record<string, ReactNode>;
   /** Header and page-level messages, above the tabs. */
   children: ReactNode;
 }
 
-export function PortfolioShell({ tabs, tabsLabel, activeTab, onTabChange, panels, children }: PortfolioShellProps) {
+export function PortfolioShell({ tabs, tabsLabel, activeTab, onTabChange, panels, tabsAside, children }: PortfolioShellProps) {
   // Height is the viewport minus the app shell's own vertical padding, read from the
   // variables AppShell publishes. This shell owns the only scroll container, so the
   // document itself never overflows (ERROR-LOG.md 2026-08-02).
@@ -35,8 +37,9 @@ export function PortfolioShell({ tabs, tabsLabel, activeTab, onTabChange, panels
           contributes nothing to intrinsic width collapses the whole page. */}
       <div className="flex-1 overflow-y-auto" data-testid="portfolio-scroll-region">
         {children}
-        <div className="px-4 pt-3">
-          <Tabs items={tabs} activeKey={activeTab} onChange={onTabChange} ariaLabel={tabsLabel} />
+        <div className="flex items-start gap-3 px-4 pt-3">
+          <Tabs className="min-w-0 flex-1" items={tabs} activeKey={activeTab} onChange={onTabChange} ariaLabel={tabsLabel} />
+          {tabsAside}
         </div>
         <div role="tabpanel" id={`panel-${activeTab}`} aria-labelledby={`tab-${activeTab}`}>
           {panels[activeTab]}

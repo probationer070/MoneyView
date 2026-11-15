@@ -20,6 +20,7 @@ export const en = {
   portfolio: {
     title: "Portfolio",
     tabs: { label: "Portfolio views", stocks: "Stocks", weights: "Weights", attribution: "Attribution" },
+    view: { label: "View", cards: "Cards", table: "Table", follow: "Follow" },
     guide: {
       about: {
         title: "What this screen is",
