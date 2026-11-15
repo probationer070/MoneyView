@@ -40,13 +40,18 @@ test("the start date in the popover reaches date_from, and the benchmark select 
   await page.getByLabel("Portfolio benchmark preset").selectOption("kospi");
   await page.keyboard.press("Escape");
   await expect(trigger(page)).toContainText("2026-02-03");
-  await page.waitForTimeout(600); // the benchmark ticker is debounced 400 ms before it joins the request
-
-  const requestPromise = page.waitForRequest(
-    (request) => request.url().endsWith("/portfolio/attribution") && request.method() === "POST",
-  );
-  await page.getByRole("button", { name: "Refresh Analysis" }).click();
-  const body = JSON.parse((await requestPromise).postData() ?? "{}");
+  // The benchmark ticker is debounced 400 ms before it joins the request, so a click inside that window
+  // sends the old one. Click again until the request carries the new benchmark.
+  let body: { date_from?: string; benchmark?: string } = {};
+  await expect(async () => {
+    const requestPromise = page.waitForRequest(
+      (request) => request.url().endsWith("/portfolio/attribution") && request.method() === "POST",
+      { timeout: 3_000 },
+    );
+    await page.getByRole("button", { name: "Refresh Analysis" }).click();
+    body = JSON.parse((await requestPromise).postData() ?? "{}");
+    expect(body.benchmark).toBe("^KS11");
+  }).toPass({ timeout: 10_000 });
   expect(body.date_from).toBe("2026-02-03");
   expect(body.benchmark).toBe("^KS11");
 });

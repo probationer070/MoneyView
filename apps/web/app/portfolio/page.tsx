@@ -5,9 +5,8 @@ import { formatNumber } from "@/lib/format";
 import { useT } from "@/lib/i18n/locale";
 import { type FormEvent, type KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Camera, ChevronDown, ChevronRight, PieChart, RefreshCw, SlidersHorizontal, Table as TableIcon, Trash2 } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
 import { fetchApi } from "@/lib/api";
 import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
@@ -20,7 +19,6 @@ import {
   toAttributionWaterfallData,
 } from "@/lib/transformers";
 import { ExportButton } from "@/components/ui/ExportButton";
-import { ViewToggle, type ViewMode } from "@/components/ui/ViewToggle";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import {
   benchmarkPresetIdForTicker,
@@ -30,8 +28,7 @@ import {
 import { useDebounce } from "@/hooks/useDebounce";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { LoadingState, SkeletonCard } from "@/components/ui/LoadingState";
-import { ActionButton } from "@/components/ui/ActionButton";
+import { SkeletonCard } from "@/components/ui/LoadingState";
 import { PortfolioAttributionSummary } from "./components/PortfolioAttributionSummary";
 import { PortfolioAllocationEditor } from "./components/PortfolioAllocationEditor";
 import { AddStockModal } from "./components/AddStockModal";
@@ -234,12 +231,6 @@ export interface StockDetail {
   news: NewsArticle[];
 }
 
-interface SectorGroup {
-  sector: string;
-  holdings: PortfolioStock[];
-}
-
-const DESKTOP_MIN = Number.parseFloat(tokens.bp.desktop); // Tailwind lg
 const PORTFOLIO_DATE_FILTERS_STORAGE_KEY = "moneyview.portfolio.dateFilters.v1";
 const PORTFOLIO_COMPARISON_CACHE_KEY = "moneyview.portfolio.comparison-cache.v1";
 const PORTFOLIO_ATTRIBUTION_CACHE_KEY = "moneyview.portfolio.attribution-cache.v1";
@@ -368,31 +359,6 @@ function ChartSkeleton({ title }: { title: string }) {
   );
 }
 
-function WatchlistSkeletonGrid() {
-  return (
-    <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-      {Array.from({ length: 4 }).map((_, idx) => (
-        <div
-          key={`watchlist-skeleton-${idx}`}
-          className="bg-[var(--surface-raised)] border border-[var(--line)] p-4 animate-pulse"
-        >
-          <div className="flex justify-between items-start mb-3">
-            <div className="space-y-2">
-              <div className="h-4 w-24 bg-[var(--surface)]" />
-              <div className="h-3 w-14 bg-[var(--surface)]" />
-            </div>
-            <div className="space-y-2">
-              <div className="h-4 w-14 bg-[var(--surface)]" />
-              <div className="h-5 w-12 bg-[var(--surface)]" />
-            </div>
-          </div>
-          <div className="h-8 w-full bg-[var(--surface)]" />
-        </div>
-      ))}
-    </section>
-  );
-}
-
 // Shared empty/error state panel for watchlist and attribution engine failures.
 export function StatusPanel({ title, message, tone = "neutral" }: { title: string; message: string; tone?: "neutral" | "warning" }) {
   if (tone === "warning") return <ErrorState title={title} message={message} />;
@@ -400,17 +366,6 @@ export function StatusPanel({ title, message, tone = "neutral" }: { title: strin
 }
 
 // Compact identity block reused by holding cards and table rows.
-function StockIdentity({ stock }: { stock: PortfolioStock }) {
-  return (
-    <div>
-      <h3 className="type-panel-title text-[var(--ink)] group-hover:text-[var(--brand-text)] transition-colors">
-        {stock.name || stock.ticker}
-      </h3>
-      <p className="type-small text-[var(--ink-muted)]">{stock.ticker}</p>
-    </div>
-  );
-}
-
 function MetricCell({ metric, toneClass }: { metric: PortfolioTickerMetrics["roicMinusWacc"]; toneClass: string }) {
   const subtitle = metricSubtitle(metric);
   return (
@@ -582,14 +537,6 @@ export function isToday(dateText: string) {
   return dateText?.slice(0, 10) === today;
 }
 
-function portfolioStatus(label: string, value: number) {
-  if (label === "beta") return value <= 1.2 ? "Good: near or below market risk." : "Risky: above-market sensitivity.";
-  if (label === "active") return value >= 0 ? "Good: outperforming benchmark." : "Bad: underperforming benchmark.";
-  if (label === "return") return value >= 0 ? "Good: positive return." : "Bad: negative return.";
-  if (label === "change") return value >= 0 ? "Good: price increased versus previous close." : "Bad: price declined versus previous close.";
-  return "Review in context.";
-}
-
 function formatWeightPercent(weight: number) {
   return formatNumber(weight, "percent", { digits: 1 });
 }
@@ -696,13 +643,6 @@ export function portfolioComparisonUniverseLabel(value: string) {
   return "Portfolio + Benchmark";
 }
 
-function portfolioComparisonUniverseHelpText(value: PortfolioComparisonUniverse) {
-  if (value === "custom") {
-    return "Custom Universe compares the selected benchmark against only the tickers you enter below. Use it when you want to test a short candidate list without changing the tracked watchlist.";
-  }
-  return "Portfolio + Benchmark uses the current tracked holdings as the stock comparison set and keeps the benchmark as the external hurdle rate.";
-}
-
 function isPortfolioComparisonSnapshotStale(
   requested: PortfolioComparisonRequestSnapshot | null,
   current: PortfolioComparisonRequestSnapshot,
@@ -757,49 +697,8 @@ function portfolioAttributionViewState({
   };
 }
 
-function portfolioWatchlistViewState({
-  hasHoldings,
-  holdingsView,
-  watchlistIsLoading,
-  watchlistIsError,
-}: {
-  hasHoldings: boolean;
-  holdingsView: ViewMode;
-  watchlistIsLoading: boolean;
-  watchlistIsError: boolean;
-}) {
-  return {
-    showError: !watchlistIsLoading && watchlistIsError,
-    showEmpty: !watchlistIsLoading && !watchlistIsError && !hasHoldings,
-    showSectorFilter: hasHoldings,
-    showSkeleton: watchlistIsLoading,
-    showChartCards: hasHoldings && !watchlistIsLoading && holdingsView === "chart",
-    showTableGroups: hasHoldings && !watchlistIsLoading && holdingsView !== "chart",
-  };
-}
-
-function benchmarkPresetLabelForTicker(ticker: string) {
-  return PORTFOLIO_BENCHMARK_PRESETS.find((preset) => preset.ticker === ticker.trim().toUpperCase())?.label ?? "Manual ticker";
-}
-
 function sectorLabel(value: string) {
   return value.trim() || "Unclassified";
-}
-
-function buildSectorGroups(watchlist: PortfolioStock[]): SectorGroup[] {
-  const grouped = new Map<string, PortfolioStock[]>();
-  for (const stock of watchlist) {
-    const sector = sectorLabel(stock.sector);
-    const current = grouped.get(sector) ?? [];
-    current.push(stock);
-    grouped.set(sector, current);
-  }
-  return Array.from(grouped.entries())
-    .sort((left, right) => left[0].localeCompare(right[0]))
-    .map(([sector, holdings]) => ({
-      sector,
-      holdings: [...holdings].sort((left, right) => left.ticker.localeCompare(right.ticker)),
-    }));
 }
 
 export function aggregateMonthlyBars(dailyBars: RawOHLCV[]): RawOHLCV[] {
@@ -836,9 +735,7 @@ export default function PortfolioPage() {
   useDevMonitorPageLoad({ component: "portfolio" });
   // Page state tracks the holdings presentation mode and the currently opened detail modal.
   const queryClient = useQueryClient();
-  const router = useRouter();
   const initialDateFilters = readStoredPortfolioDateFilters();
-  const [holdingsView, setHoldingsView] = useState<ViewMode>("chart");
   const [selectedStockContext, setSelectedStockContext] = useState<SelectedStockContext | null>(null);
   const [holdingStartDate, setHoldingStartDate] = useState(initialDateFilters.holdingStartDate);
   const [attributionAsOfDate, setAttributionAsOfDate] = useState(initialDateFilters.attributionAsOfDate);
@@ -858,14 +755,12 @@ export default function PortfolioPage() {
   const [importJsonArmed, setImportJsonArmed] = useState(false);
   const [mutationMessage, setMutationMessage] = useState<string | null>(null);
   const [portfolioComparisonMode, setPortfolioComparisonMode] = useState<"snapshot" | "live">("snapshot");
-  const [portfolioComparisonUniverse, setPortfolioComparisonUniverse] = useState<PortfolioComparisonUniverse>("portfolio_plus_benchmark");
+  const [portfolioComparisonUniverse] = useState<PortfolioComparisonUniverse>("portfolio_plus_benchmark");
   const [portfolioComparisonBenchmarkTicker, setPortfolioComparisonBenchmarkTicker] = useState(DEFAULT_PORTFOLIO_BENCHMARK_TICKER);
-  const [portfolioComparisonCustomTickersInput, setPortfolioComparisonCustomTickersInput] = useState("NVDA, TSLA");
+  const [portfolioComparisonCustomTickersInput] = useState("NVDA, TSLA");
   const [portfolioComparisonMessage, setPortfolioComparisonMessage] = useState<string | null>(null);
   const [portfolioAnalysisMessage, setPortfolioAnalysisMessage] = useState<string | null>(null);
   const [applyAllocationToSnapshot, setApplyAllocationToSnapshot] = useState(false);
-  const [sectorFilter, setSectorFilter] = useState("All Sectors");
-  const [collapsedSectors, setCollapsedSectors] = useState<Record<string, boolean>>({});
   // "custom" is the curated group seeded from stock_targets.json. It replaces the old
   // "held" filter, which meant weight > 0 and therefore matched nothing at all while every
   // weight was 0 -- see FOLLOWED_GROUP.
@@ -951,18 +846,6 @@ export default function PortfolioPage() {
   const debouncedCustomTickersInput = useDebounce(normalizedCustomTickersInput, 400);
   const debouncedWeightDraftsKey = useDebounce(JSON.stringify(weightDrafts), 450);
   const debouncedTotalInvestmentInput = useDebounce(totalInvestmentInput, 500);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const syncHoldingsViewForViewport = () => {
-      setHoldingsView((current) => (window.innerWidth < DESKTOP_MIN ? "table" : current));
-    };
-
-    syncHoldingsViewForViewport();
-    window.addEventListener("resize", syncHoldingsViewForViewport);
-    return () => window.removeEventListener("resize", syncHoldingsViewForViewport);
-  }, []);
 
   useEffect(() => {
     try {
@@ -1205,18 +1088,6 @@ export default function PortfolioPage() {
     () => watchlist.filter((stock) => stock.weight > 0).length,
     [watchlist],
   );
-  const availableSectors = useMemo(
-    () => buildSectorGroups(watchlist).map((group) => group.sector),
-    [watchlist],
-  );
-  const activeSectorFilter = sectorFilter === "All Sectors" || availableSectors.includes(sectorFilter)
-    ? sectorFilter
-    : "All Sectors";
-  const filteredWatchlist = useMemo(
-    () => (activeSectorFilter === "All Sectors" ? watchlist : watchlist.filter((stock) => sectorLabel(stock.sector) === activeSectorFilter)),
-    [activeSectorFilter, watchlist],
-  );
-  const watchlistSectorGroups = useMemo(() => buildSectorGroups(filteredWatchlist), [filteredWatchlist]);
   const existingTicker = useMemo(
     () => watchlist.find((stock) => stock.ticker === newTicker.trim().toUpperCase()) ?? null,
     [newTicker, watchlist],
@@ -1363,31 +1234,6 @@ export default function PortfolioPage() {
     || (portfolioComparisonUniverse === "custom" && normalizedCustomTickersInput !== debouncedCustomTickersInput)
     || portfolioComparisonQuery.isFetching
     || attributionQuery.isFetching;
-  const portfolioAnalysisDisplayLastUpdatedAt = useMemo(() => {
-    const candidates = [
-      portfolioComparisonQuery.data ? new Date(portfolioComparisonQuery.dataUpdatedAt).toISOString() : null,
-      attributionQuery.data ? new Date(attributionQuery.dataUpdatedAt).toISOString() : null,
-      cachedPortfolioComparison ? cachedPortfolioComparisonCalculation?.lastUpdatedAt ?? null : null,
-      cachedPortfolioAttribution ? cachedPortfolioAttributionCalculation?.lastUpdatedAt ?? null : null,
-    ].filter((value): value is string => Boolean(value));
-    if (candidates.length === 0) return null;
-    return candidates.sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0];
-  }, [
-    attributionQuery.data,
-    attributionQuery.dataUpdatedAt,
-    cachedPortfolioAttribution,
-    cachedPortfolioAttributionCalculation?.lastUpdatedAt,
-    cachedPortfolioComparison,
-    cachedPortfolioComparisonCalculation?.lastUpdatedAt,
-    portfolioComparisonQuery.data,
-    portfolioComparisonQuery.dataUpdatedAt,
-  ]);
-  const portfolioComparisonIsStale = isPortfolioComparisonSnapshotStale(portfolioComparisonRequestedSnapshot, comparisonCurrentSnapshot);
-  const portfolioAttributionIsStale = isPortfolioAttributionSnapshotStale(
-    portfolioAttributionRequestedSnapshot,
-    attributionCurrentSnapshot,
-  );
-  const portfolioAnalysisIsStale = portfolioComparisonIsStale || portfolioAttributionIsStale;
   const comparisonMetricsByTicker = useMemo<Record<string, PortfolioTickerMetrics>>(() => buildPortfolioTickerMetrics({
     watchlist,
     activeComparisonData: activeComparisonData ?? null,
@@ -1466,13 +1312,6 @@ export default function PortfolioPage() {
     hasHoldings,
     canRunAttribution,
   });
-  const watchlistView = portfolioWatchlistViewState({
-    hasHoldings,
-    holdingsView,
-    watchlistIsLoading: watchlistQuery.isLoading,
-    watchlistIsError: watchlistQuery.isError,
-  });
-
   useEffect(() => {
     if (!portfolioComparisonQuery.data || !effectivePortfolioComparisonSnapshot) return;
     writeSessionCache(PORTFOLIO_COMPARISON_CACHE_KEY, {
@@ -1931,8 +1770,6 @@ export default function PortfolioPage() {
     requestAllocationFocus(watchlistStock.ticker);
   };
 
-  const benchmarkQuickActions = PORTFOLIO_BENCHMARK_PRESETS.filter((preset) => ["sp500", "kospi", "kosdaq"].includes(preset.id));
-
   // D9: the two dates and the benchmark sit behind one trigger at the right end of the tab row.
   const periodControl = (
     <PeriodControl start={holdingStartDate} end={attributionAsOfDate}>
@@ -2270,6 +2107,27 @@ export default function PortfolioPage() {
         onTabChange={setActiveTab}
         tabsAside={activeTab === "stocks" ? <StockViewToggle value={stocksView} onChange={setStocksView} /> : activeTab === "attribution" ? periodControl : null}
         panels={{ stocks: stocksPanel, weights: allocationPanelBody, attribution: attributionPanelBody }}
+        notices={
+          <>
+            <div className="px-4 pt-3"><PortfolioGuide /></div>
+            {/* Mutation feedback lives in the shell, not in a panel: its writers are spread
+                across the holdings panel (Sync, delete), the stock detail modal (sector edit,
+                add to portfolio) and the allocation panel, and only one panel mounts at a time. */}
+            {mutationMessage ? (
+              <p data-testid="portfolio-mutation-message" className="px-4 pt-3 type-body text-[var(--ink-muted)]">
+                {mutationMessage}
+              </p>
+            ) : null}
+            {/* Same reason: normalize-weights and save-allocation both write this from the
+                allocation panel, but it used to render only inside the snapshot panel, so
+                "Failed to update the snapshot after saving allocation changes." was never seen. */}
+            {portfolioComparisonMessage ? (
+              <p data-testid="portfolio-comparison-message" className="px-4 pt-3 type-body text-[var(--ink-muted)]">
+                {portfolioComparisonMessage}
+              </p>
+            ) : null}
+          </>
+        }
       >
         <div className="px-4 pt-4">
           {/* Header: page identity and export. The attribution dates live in the Attribution tab. */}
@@ -2299,23 +2157,6 @@ export default function PortfolioPage() {
           adding={addWatchlistMutation.isPending}
           formatSectorLabel={sectorLabel}
         />
-        <div className="px-4 pt-3"><PortfolioGuide /></div>
-        {/* Mutation feedback lives in the shell, not in a panel: its writers are spread
-            across the holdings panel (Sync, delete), the stock detail modal (sector edit,
-            add to portfolio) and the allocation panel, and only one panel mounts at a time. */}
-        {mutationMessage ? (
-          <p data-testid="portfolio-mutation-message" className="px-4 pt-3 type-body text-[var(--ink-muted)]">
-            {mutationMessage}
-          </p>
-        ) : null}
-        {/* Same reason: normalize-weights and save-allocation both write this from the
-            allocation panel, but it used to render only inside the snapshot panel, so
-            "Failed to update the snapshot after saving allocation changes." was never seen. */}
-        {portfolioComparisonMessage ? (
-          <p data-testid="portfolio-comparison-message" className="px-4 pt-3 type-body text-[var(--ink-muted)]">
-            {portfolioComparisonMessage}
-          </p>
-        ) : null}
       </PortfolioShell>
       {/* Stock detail modal renders on demand when a holding is selected. */}
       {selectedStock && (

@@ -607,11 +607,11 @@ test.describe("the verdict strip", () => {
   });
 });
 
-// Spec §2A (D10): a one-screen page leaves 24px under its panel, and every other page keeps the 80px pad.
+// Spec §2A (D10): a one-screen page leaves 24px under its panel, and every other page keeps the 80px pad (portfolio joined the one-screen routes).
 test.describe("the bottom pad", () => {
   test.use({ viewport: { width: 1280, height: 720 } });
 
-  test("corporate leaves 24px under the panel, and portfolio keeps 80px", async ({ page }) => {
+  test("corporate and portfolio leave 24px under the panel", async ({ page }) => {
     await mockCorporatePageApi(page);
     await gotoCorporate(page);
     const panel = await lowerPanel(page).boundingBox();
@@ -620,7 +620,7 @@ test.describe("the bottom pad", () => {
     await mockPortfolioPageApi(page);
     await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
     await expect(page.locator("main")).toBeAttached({ timeout: 60_000 });
-    expect(await page.locator("main").evaluate((element) => getComputedStyle(element).paddingBottom)).toBe("80px");
+    expect(await page.locator("main").evaluate((element) => getComputedStyle(element).paddingBottom)).toBe("24px");
   });
 });
 
