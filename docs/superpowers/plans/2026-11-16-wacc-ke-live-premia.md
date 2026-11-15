@@ -193,3 +193,12 @@ Mock payloads gain the `assumptions` object with seed values, so rendered text s
 - O2: `company_baseline` / `fair_value` defaults are removed (parameter required, callers pass the resolver rate); case semantics unchanged. Confirm this reading of answer 9.
 - O3: The hurdle bar label `Risk-free: 4.2%` keeps its format; source and as-of go in a caption. Confirm.
 - O4: `CorporateMetrics.wacc` / `cost_of_equity` become nullable (regenerates shared types); S2a lists consumers by grep before editing.
+
+
+## Owner approvals (2026-11-16)
+
+- Stage 3 existing-test change inventory (14 sites) approved as listed. Any change outside it: stop and ask.
+- O1: no records_sync for `market_assumptions` now; owner-entered rows are entered on each PC.
+- O2: corporate fair value and baseline read the resolver; valuation cases and Monte Carlo stay out of scope.
+- O3: hurdle label format unchanged; source and as-of in a separate caption.
+- O4: `CorporateMetrics.wacc` / `cost_of_equity` become nullable for the refusal path.
