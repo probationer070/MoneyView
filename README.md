@@ -158,7 +158,7 @@ tab inside it is here.
 </details>
 
 <details>
-<summary><strong>Portfolio</strong> — holdings, snapshot summary, attribution, allocation, the per-stock modal</summary>
+<summary><strong>Portfolio</strong> — holdings, snapshot summary, allocation, the per-stock modal</summary>
 
 <table>
   <tr>
@@ -166,7 +166,6 @@ tab inside it is here.
     <td width="50%"><img src="./data/img/readme-portfolio-snapshot.png" alt="Latest snapshot summary" width="100%" /><br/><sub>Latest snapshot summary</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="./data/img/readme-portfolio-attribution.png" alt="Attribution" width="100%" /><br/><sub>Attribution</sub></td>
     <td width="50%"><img src="./data/img/readme-portfolio-allocation.png" alt="Allocation workspace" width="100%" /><br/><sub>Allocation workspace</sub></td>
   </tr>
   <tr>

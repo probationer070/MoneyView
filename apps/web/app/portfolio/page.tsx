@@ -2,7 +2,8 @@
 
 import { BilingualLabel } from "@/components/ui/BilingualLabel";
 import { formatNumber } from "@/lib/format";
-import { useT } from "@/lib/i18n/locale";
+import { useLocale, useT } from "@/lib/i18n/locale";
+import { LABELS } from "@/lib/i18n/labels";
 import { type FormEvent, type KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
@@ -356,6 +357,9 @@ function buildBrowserPortfolioStock(company: CorporateCompany, existingStock?: P
   };
 }
 
+const DCF_HEADER = "DCF value vs price (one-off gap)";
+const IMPLIED_HEADER = "Implied return vs WACC (pts per year)";
+
 // Table layout for holdings when the user switches away from card view.
 function HoldingsTable({
   watchlist,
@@ -384,8 +388,8 @@ function HoldingsTable({
             <th className="px-2 py-3 text-right type-caption"><BilingualLabel k="currentPrice" /></th>
             <th className="hidden px-2 py-3 text-right md:table-cell type-caption"><BilingualLabel k="trend" /></th>
             <th className="px-2 py-3 text-right type-caption"><BilingualLabel k="roicWacc" /></th>
-            <th className="px-2 py-3 text-right type-caption">DCF value vs price (one-off gap)</th>
-            <th className="px-2 py-3 text-right type-caption">Implied return vs WACC (pts per year)</th>
+            <th className="px-2 py-3 text-right type-caption">{DCF_HEADER}</th>
+            <th className="px-2 py-3 text-right type-caption">{IMPLIED_HEADER}</th>
             <th className="hidden px-2 py-3 text-right md:table-cell type-caption"><BilingualLabel k="volatility" /></th>
             <th className="hidden px-2 py-3 text-right lg:table-cell type-caption"><BilingualLabel k="weight" /></th>
             <th className="px-2 py-3 text-center type-caption">{t("portfolio.view.follow")}</th>
@@ -625,6 +629,7 @@ export function buildMovingAverageSeries(prices: RawOHLCV[], windowSize: (typeof
 
 export default function PortfolioPage() {
   const t = useT();
+  const { locale } = useLocale();
   useDevMonitorPageLoad({ component: "portfolio" });
   // Page state tracks the holdings presentation mode and the currently opened detail modal.
   const queryClient = useQueryClient();
@@ -822,11 +827,6 @@ export default function PortfolioPage() {
     () => watchlist.map((stock) => `${stock.ticker}:${stock.weight.toFixed(6)}`).join("|"),
     [watchlist],
   );
-  const weights = useMemo(() => {
-    if (tickers.length === 0) return [];
-    if (usingStoredWeights) return storedWeights;
-    return tickers.map(() => 1 / tickers.length);
-  }, [storedWeights, tickers, usingStoredWeights]);
   const hasHoldings = watchlist.length > 0;
   // watchlist is referentially stable across renders: watchlistQuery.data defaults to the
   // module-level EMPTY_WATCHLIST, not a fresh literal, so these memos only recompute when
@@ -1056,6 +1056,30 @@ export default function PortfolioPage() {
     portfolioComparisonUniverse,
     watchlist,
   ]);
+  // The Stocks table's columns as displayed, one row per holding shown; Follow is left out.
+  const exportTable = useMemo(() => {
+    const label = (key: keyof typeof LABELS) => LABELS[key][locale === "ko" ? 0 : 1];
+    const columns = [
+      label("ticker"), label("name"), label("sector"), label("currentPrice"), label("change"),
+      label("roicWacc"), DCF_HEADER, IMPLIED_HEADER, label("volatility"), label("weight"),
+    ];
+    const rows = visibleStocks.map((stock) => {
+      const metrics = comparisonMetricsByTicker[stock.ticker] ?? EMPTY_COMPARISON_METRICS;
+      return [
+        stock.ticker,
+        stock.name || stock.ticker,
+        sectorLabel(stock.sector),
+        formatCurrencyCompact(metrics.currentPrice ?? stock.last_close),
+        formatNumber((stock.delta?.delta_pct ?? 0) / 100, "percent", { signed: true, locale }),
+        metrics.roicMinusWacc.displayValue,
+        metrics.dcfUpside.displayValue,
+        metrics.impliedVsWacc.displayValue,
+        metrics.volatility.displayValue,
+        formatWeightPercent(stock.weight),
+      ];
+    });
+    return { columns, rows };
+  }, [comparisonMetricsByTicker, locale, visibleStocks]);
   const allocationRows = useMemo(() => watchlist.map((stock) => {
     const allocationPercent = parseAllocationPercent(
       weightDrafts[stock.ticker] ?? (stock.weight * 100).toFixed(1),
@@ -1769,7 +1793,7 @@ export default function PortfolioPage() {
               </p>
             </div>
             <div className="flex flex-col gap-3 lg:items-end">
-              <ExportButton tickers={tickers} weights={weights} benchmark={DEFAULT_PORTFOLIO_BENCHMARK_TICKER} period="5y" currency="USD" dateFrom="" asOfDate="" />
+              <ExportButton columns={exportTable.columns} rows={exportTable.rows} title={t("portfolio.title")} />
             </div>
           </header>
         </div>

@@ -1,19 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { fetchApi } from "@/lib/api";
 import { useT } from "@/lib/i18n/locale";
 import { ExportMenu, type ExportItem } from "@/components/ui/ExportMenu";
-import type { ReportExportFormatEnum, ReportExportResponse } from "../../../../packages/shared-types/generated/portfolio";
 
 interface ExportButtonProps {
-  tickers: string[];
-  weights: number[];
-  benchmark?: string;
-  period?: "1w" | "1mo" | "3mo" | "6mo" | "1y" | "2y" | "5y";
-  currency?: string;
-  dateFrom?: string;
-  asOfDate?: string;
+  /** Header cells, already in the active locale. */
+  columns: string[];
+  /** One entry per holding shown, cells formatted exactly as the table prints them. */
+  rows: string[][];
+  title: string;
 }
 
 function downloadBlob(filename: string, type: string, content: string) {
@@ -26,107 +21,41 @@ function downloadBlob(filename: string, type: string, content: string) {
   URL.revokeObjectURL(url);
 }
 
+// RFC 4180: quote a cell holding a comma, quote or line break; double the quotes inside it.
+function csvCell(value: string) {
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
 
-export function ExportButton({
-  tickers,
-  weights,
-  benchmark = "^GSPC",
-  period = "5y",
-  currency = "USD",
-  dateFrom = "",
-  asOfDate = "",
-}: ExportButtonProps) {
-  const [isLoading, setIsLoading] = useState(false);
+function escapeHtml(value: string) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+export function ExportButton({ columns, rows, title }: ExportButtonProps) {
   const t = useT();
-  const canExport = useMemo(() => tickers.length > 0 && weights.length > 0, [tickers, weights]);
+  const today = new Date().toISOString().slice(0, 10);
 
-  const requestBody = useMemo(
-    () => ({
-      tickers,
-      weights,
-      filters: {
-        period,
-        benchmark,
-        currency,
-        date_from: dateFrom || null,
-        date_to: asOfDate || null,
-      },
-      report_options: {
-        formats: ["html", "pdf", "markdown", "csv", "json"],
-        include_risk_metrics: true,
-        include_sector_table: true,
-        include_methodology: true,
-      },
-      attribution_method: "brinson_fachler_arithmetic",
-      allow_synthetic_fallback: true,
-      allow_benchmark_proxy: true,
-      version: "phase5-v1",
-    }),
-    [asOfDate, benchmark, currency, dateFrom, period, tickers, weights]
-  );
-
-  async function fetchExport(format: ReportExportFormatEnum): Promise<ReportExportResponse> {
-    return fetchApi<ReportExportResponse>("/report/export", {
-      method: "POST",
-      body: JSON.stringify({
-        request: requestBody,
-        format,
-      }),
-    });
+  function exportCsv() {
+    const lines = [columns, ...rows].map((line) => line.map(csvCell).join(","));
+    // The BOM is what makes Excel read the file as UTF-8, so Korean names survive.
+    downloadBlob(`moneyview-holdings-${today}.csv`, "text/csv;charset=utf-8", `﻿${lines.join("\r\n")}\r\n`);
   }
 
-  async function exportJson() {
-    if (!canExport) return;
-    setIsLoading(true);
-    try {
-      const exported = await fetchExport("json");
-      downloadBlob(exported.filename, exported.content_type, exported.content);
-    } finally {
-      setIsLoading(false);
+  function exportPdf() {
+    const head = columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("");
+    const body = rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("");
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)} ${today}</title>`
+      + `<style>table{border-collapse:collapse}th,td{border:1px solid;padding:4px 8px;text-align:left}</style></head>`
+      + `<body><h1>${escapeHtml(title)}</h1><p>${today}</p><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></body></html>`;
+    const popup = window.open("", "_blank", "width=1200,height=900");
+    if (popup) {
+      popup.document.write(html);
+      popup.document.close();
+      popup.focus();
+      popup.print();
     }
   }
 
-  async function exportMarkdown() {
-    if (!canExport) return;
-    setIsLoading(true);
-    try {
-      const exported = await fetchExport("markdown");
-      downloadBlob(exported.filename, exported.content_type, exported.content);
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function exportCsv() {
-    if (!canExport) return;
-    setIsLoading(true);
-    try {
-      const exported = await fetchExport("csv");
-      downloadBlob(exported.filename, exported.content_type, exported.content);
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function exportPdf() {
-    if (!canExport) return;
-    setIsLoading(true);
-    try {
-      const exported = await fetchExport("pdf");
-      const html = exported.content;
-      const popup = window.open("", "_blank", "width=1200,height=900");
-      if (popup) {
-        popup.document.write(html);
-        popup.document.close();
-        popup.focus();
-        popup.print();
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  if (!canExport) {
+  if (rows.length === 0) {
     return (
       <button
         className="whitespace-nowrap px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] text-[var(--on-brand)] bg-[var(--brand)]"
@@ -139,16 +68,13 @@ export function ExportButton({
 
   const exportItems: ExportItem[] = [
     { key: "pdf", label: t("common.printPdf"), onSelect: exportPdf },
-    { key: "csv", label: t("common.exportCsv"), onSelect: exportCsv, separatorBefore: true },
-    { key: "json", label: t("common.exportJson"), onSelect: exportJson },
-    { key: "markdown", label: t("common.exportMarkdown"), onSelect: exportMarkdown },
+    { key: "csv", label: "CSV", onSelect: exportCsv, separatorBefore: true },
   ];
 
   return (
     <ExportMenu
       items={exportItems}
       label={t("common.export")}
-      busy={isLoading}
       testIdPrefix="portfolio-export"
       triggerClassName="inline-flex items-center gap-2 whitespace-nowrap px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] hover:bg-[var(--surface)]"
     />
