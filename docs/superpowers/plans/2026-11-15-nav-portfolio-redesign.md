@@ -26,6 +26,8 @@ Test inventories: `.superpowers/sdd/2026-11-15-nav-portfolio/topnav-inventory.md
 | D14 | Weights tab sliders and checkboxes get a hit area of at least 24px; the `test.fixme` "controls inside a panel are big enough to hit" is revived. |
 | D15 | The table view has no news column (news stays on the cards). |
 
+| D16 | (owner 2026-11-16) The 성과 기여 (Attribution) tab is removed with its code: the tab, PeriodControl (dates and benchmark), the attribution query and calculate button, PortfolioAttributionSummary, AttributionWaterfall and their catalog keys. The export menu keeps working with the default window and benchmark. Tests that only exercise the removed feature are deleted; any other assertion change needs the owner. Supersedes D9 and D14's attribution part. |
+
 ## Tasks (one at a time; each runs only its own specs; the controller runs the wide regression)
 
 | Task | Scope | Specs |
