@@ -15,11 +15,13 @@ export function ExportMenu({
   label,
   triggerClassName = DEFAULT_TRIGGER_CLASS,
   busy = false,
+  testIdPrefix = "mc-export",
 }: {
   items: ExportItem[];
   label?: string;
   triggerClassName?: string;
   busy?: boolean;
+  testIdPrefix?: string;
 }) {
   const t = useT();
   const menuId = useId();
@@ -79,7 +81,7 @@ export function ExportMenu({
         ref={trigger}
         id={triggerId}
         type="button"
-        data-testid="mc-export"
+        data-testid={testIdPrefix}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
@@ -111,7 +113,7 @@ export function ExportMenu({
                 type="button"
                 role="menuitem"
                 disabled={busy}
-                data-testid={`mc-export-${item.key}`}
+                data-testid={`${testIdPrefix}-${item.key}`}
                 onClick={() => {
                   item.onSelect();
                   close();

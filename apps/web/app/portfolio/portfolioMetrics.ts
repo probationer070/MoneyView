@@ -9,7 +9,6 @@ import type {
 } from "./page";
 
 export type PortfolioMetricSourceMode =
-  | "selected_snapshot"
   | "snapshot"
   | "live"
   | "cached"
@@ -117,8 +116,6 @@ export function buildPortfolioDisplayMetric(
 
 function unavailableReasonForSource(sourceMode: PortfolioMetricSourceMode) {
   switch (sourceMode) {
-    case "selected_snapshot":
-      return "No selected comparison snapshot row for this ticker.";
     case "snapshot":
       return "No latest comparison snapshot for this ticker.";
     case "live":
@@ -131,12 +128,9 @@ function unavailableReasonForSource(sourceMode: PortfolioMetricSourceMode) {
 }
 
 function comparisonSourceMode(args: {
-  selectedHistoryPointSnapshotVersion: string | null;
-  selectedSnapshotData: CorporateComparisonResponse | undefined;
   comparisonData: CorporateComparisonResponse | null;
   comparisonQueryHasData: boolean;
 }): PortfolioMetricSourceMode {
-  if (args.selectedHistoryPointSnapshotVersion && args.selectedSnapshotData) return "selected_snapshot";
   if (args.comparisonQueryHasData && args.comparisonData?.snapshot.mode === "live") return "live";
   if (args.comparisonQueryHasData && args.comparisonData?.snapshot.mode === "snapshot") return "snapshot";
   if (args.comparisonData) return "cached";
@@ -177,16 +171,12 @@ export function buildPortfolioTickerMetrics(args: {
   watchlist: PortfolioStock[];
   activeComparisonData: CorporateComparisonResponse | null;
   comparisonData: CorporateComparisonResponse | null;
-  selectedSnapshotData: CorporateComparisonResponse | undefined;
-  selectedHistoryPointSnapshotVersion: string | null;
   portfolioComparisonUniverse: PortfolioComparisonUniverse;
   portfolioComparisonQueryHasData: boolean;
   activeSnapshotMeta: CorporateComparisonSnapshotMeta | null;
   estimateVolatilityFromSparkline: (sparkline: number[]) => number | null;
 }): Record<string, PortfolioTickerMetrics> {
   const sourceMode = comparisonSourceMode({
-    selectedHistoryPointSnapshotVersion: args.selectedHistoryPointSnapshotVersion,
-    selectedSnapshotData: args.selectedSnapshotData,
     comparisonData: args.comparisonData,
     comparisonQueryHasData: args.portfolioComparisonQueryHasData,
   });

@@ -149,6 +149,7 @@ export function ExportButton({
       items={exportItems}
       label={t("common.export")}
       busy={isLoading}
+      testIdPrefix="portfolio-export"
       triggerClassName="inline-flex items-center gap-2 whitespace-nowrap px-3 py-2 type-body rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] hover:bg-[var(--surface)]"
     />
   );

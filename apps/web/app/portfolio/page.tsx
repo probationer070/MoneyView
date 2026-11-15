@@ -796,9 +796,9 @@ export default function PortfolioPage() {
   const [stocksView, setStocksView] = useTabState<StocksView>(tabStateKey("portfolio", "stocksView"), "cards");
   const [storedTab, setActiveTab] = useTabState<string>(tabStateKey("portfolio", "tab"), "stocks");
   const activeTab = ["stocks", "weights", "attribution"].includes(storedTab) ? storedTab : "stocks";
-  // A pending scroll/focus request against the allocation panel. SidePanel renders null
-  // while closed, so allocationSectionRef and weightInputRefs are null until the panel has
-  // mounted -- a requestAnimationFrame issued in the same tick as the open would still find
+  // A pending scroll/focus request against the allocation section. Its content is not rendered
+  // while the Weights tab is inactive, so allocationSectionRef and weightInputRefs are null until
+  // the tab has mounted -- a requestAnimationFrame issued in the same tick as the tab switch would still find
   // nothing. Routing the request through state instead means the consuming effect runs in
   // the commit that mounted the panel, and React attaches refs during commit, before
   // effects. The token makes a repeated request re-fire when the panel is already open.
@@ -822,11 +822,9 @@ export default function PortfolioPage() {
   useEffect(() => {
     if (!allocationFocusRequest) return;
     allocationSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    // The focus is deferred a frame, the scroll is not. SidePanel focuses its own container
-    // when it opens, and the closing detail modal restores focus as it unmounts -- both land
-    // after this effect, so focusing the input here would just be overwritten. By now the
-    // panel has mounted and its refs are attached, which is what the earlier
-    // requestAnimationFrame-at-click-time could not guarantee.
+    // The focus is deferred a frame, the scroll is not. The Weights tab was switched to with
+    // this request, so by now its refs are attached, which the click-time requestAnimationFrame
+    // could not guarantee.
     const { ticker } = allocationFocusRequest;
     const frame = requestAnimationFrame(() => {
       if (!ticker) return;
@@ -1238,8 +1236,6 @@ export default function PortfolioPage() {
     watchlist,
     activeComparisonData: activeComparisonData ?? null,
     comparisonData: comparisonData ?? null,
-    selectedSnapshotData: undefined,
-    selectedHistoryPointSnapshotVersion: null,
     portfolioComparisonUniverse,
     portfolioComparisonQueryHasData: Boolean(portfolioComparisonQuery.data),
     activeSnapshotMeta,
@@ -1844,7 +1840,7 @@ export default function PortfolioPage() {
   );
 
   // Panel bodies: the sections that used to stack down the page, moved verbatim into
-  // the rail-triggered side panels. Only the tile grid stays in the scrolling region.
+  // the tab panels. Only the tile grid stays in the scrolling region.
   const attributionPanelBody = (
     <>
       <div className="flex flex-col gap-3 px-4 pt-3">
