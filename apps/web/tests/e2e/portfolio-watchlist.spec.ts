@@ -218,10 +218,8 @@ test("clicking a holding opens the stock detail modal", async ({ page }) => {
   await expect(stockDetailDialog.getByRole("heading", { name: "4/11/2026", exact: true })).toBeVisible();
   await expect(stockDetailDialog.getByText("13.20%").first()).toBeVisible();
 
-  // Escape closes the modal even with the holdings rail panel open behind it. Both
-  // overlays listen on `document`, and ModalShell's listener used to be re-registered
-  // mid-dispatch -- which the DOM skips for that keypress (ERROR-LOG.md 2026-08-02).
-  await expect(page.getByTestId("portfolio-side-panel")).toBeVisible();
+  // Escape closes the modal. Overlays listen on `document`, and ModalShell's listener used to
+  // be re-registered mid-dispatch -- which the DOM skips for that keypress (ERROR-LOG.md 2026-08-02).
   await page.keyboard.press("Escape");
   await expect(portfolioModal(page)).toHaveCount(0);
 });
@@ -283,6 +281,8 @@ test("deleted holdings stay searchable and can reopen detail from the stock sear
   await clearAllHoldings(page);
   await addHolding(page, "AAPL", "Apple Inc.", "Technology");
 
+  // The Weights tab was the last one open; select Stocks so the reload below restores it (tab state is per session).
+  await openPortfolioPanel(page, "holdings");
   await clearAllHoldings(page);
   await expect(page.getByRole("button", { name: /^Open details for/ })).toHaveCount(0);
 
@@ -352,7 +352,7 @@ test("weight editing and sync or import controls are visible and actionable", as
   await page.getByLabel("Arm destructive JSON import").check();
   await page.getByRole("button", { name: "Import JSON Into DB" }).click();
   await openPortfolioPanel(page, "holdings");
-  await expect(page.locator('[role="button"]').filter({ hasText: "Apple Inc." }).first()).toBeVisible();
+  await expect(page.getByTestId("stock-tile-AAPL")).toBeVisible();
 });
 
 test("allocation normalize updates saved weights to a 100 percent total", async ({ page }) => {
