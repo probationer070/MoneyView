@@ -20,11 +20,12 @@ test("every menu panel label is bold ink, active or not, and the active one is s
   await mockValuationApi(page);
   await page.goto("/valuation", { waitUntil: "domcontentloaded" });
 
-  await page.getByTestId("topnav-menu").hover();
+  // ☰ opens the grouped panel; the current page's group (Companies & Valuation) is expanded.
+  await page.locator("#app-topnav").getByRole("button", { name: "Menu", exact: true }).click();
   const sidebar = page.locator("#app-nav-panel");
   await expect(sidebar).toBeVisible();
   const active = sidebar.getByRole("link", { name: "Valuation" });
-  const inactive = sidebar.getByRole("link", { name: "Portfolio" });
+  const inactive = sidebar.getByRole("link", { name: "Cases" });
   await expect(active).toBeVisible({ timeout: 60_000 });
   await expect(inactive).toBeVisible();
 

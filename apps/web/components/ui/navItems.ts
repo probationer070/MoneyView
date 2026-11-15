@@ -26,6 +26,27 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: "/alerts", key: "nav.alerts", shortKey: "navShort.alerts", icon: History },
 ];
 
+export interface NavGroup {
+  key: string;
+  label: MessageKey;
+  icon: LucideIcon;
+  /** Pages in flyout order. */
+  hrefs: readonly string[];
+}
+
+/** The ☰ panel's groups (2026-11-15 D2). Every NAV_ITEMS entry belongs to exactly one group. */
+export const NAV_GROUPS: readonly NavGroup[] = [
+  { key: "market", label: "navGroup.market", icon: LayoutDashboard, hrefs: ["/", "/news", "/events"] },
+  { key: "signals", label: "navGroup.signals", icon: Radar, hrefs: ["/signals", "/alerts"] },
+  { key: "corporate", label: "navGroup.corporate", icon: Building2, hrefs: ["/corporate", "/valuation", "/cases"] },
+  { key: "portfolio", label: "navGroup.portfolio", icon: PieChart, hrefs: ["/portfolio", "/monte-carlo", "/decisions"] },
+];
+
+/** The group that holds the page at `href`, if any. */
+export function navGroupOf(href: string | undefined): NavGroup | null {
+  return NAV_GROUPS.find((group) => href !== undefined && group.hrefs.includes(href)) ?? null;
+}
+
 /** Prefix match, so /cases/2 is still "Cases" (plan N7). "/" matches only itself. */
 export function activeNavItem(pathname: string): NavItem | null {
   return NAV_ITEMS.find((item) => (

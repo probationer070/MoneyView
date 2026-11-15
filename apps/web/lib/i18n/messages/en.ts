@@ -9,6 +9,7 @@ export const en = {
     decisions: "Decisions", valuation: "Valuation", cases: "Cases", events: "Events", signals: "Signals",
     alerts: "Records",
   },
+  navGroup: { market: "Markets", signals: "Signals", corporate: "Companies & Valuation", portfolio: "Portfolio" },
   topnav: { primary: "Primary", full: "All pages", menu: "Menu", poweredBy: "Powered by FastAPI & Next.js" },
   common: {
     loading: "Loading…", retry: "Retry", unavailable: "Could not be loaded.",

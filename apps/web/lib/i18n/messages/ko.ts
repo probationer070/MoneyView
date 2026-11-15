@@ -12,6 +12,7 @@ export const ko: Messages = {
     decisions: "의사결정", valuation: "가치평가", cases: "케이스", events: "이벤트", signals: "거시 신호",
     alerts: "신호 기록",
   },
+  navGroup: { market: "시장", signals: "신호", corporate: "기업·가치평가", portfolio: "포트폴리오" },
   topnav: { primary: "주 메뉴", full: "전체 페이지", menu: "메뉴", poweredBy: "Powered by FastAPI & Next.js" },
   common: {
     loading: "불러오는 중…", retry: "다시 시도", unavailable: "불러오지 못했습니다.",
