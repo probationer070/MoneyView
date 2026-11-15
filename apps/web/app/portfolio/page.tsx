@@ -64,10 +64,15 @@ function ModalLoadingOverlay({ label }: { label: string }) {
   );
 }
 
+function StockDetailLoading() {
+  const t = useT();
+  return <ModalLoadingOverlay label={t("portfolio.detailLoading")} />;
+}
+
 const StockDetailModal = dynamic(
   () => import("./components/StockDetailModal").then((mod) => mod.StockDetailModal),
   {
-    loading: () => <ModalLoadingOverlay label="Loading stock detail" />,
+    loading: () => <StockDetailLoading />,
     ssr: false,
   },
 );
@@ -514,8 +519,8 @@ function HoldingsTable({
                       onToggleFollow(stock);
                     }}
                     aria-pressed={followed}
-                    aria-label={followed ? `Unfollow ${stock.ticker}` : `Follow ${stock.ticker}`}
-                    title={followed ? "Followed — click to remove" : "Follow this stock"}
+                    aria-label={followed ? t("portfolio.tile.unfollow", { ticker: stock.ticker }) : t("portfolio.tile.follow", { ticker: stock.ticker })}
+                    title={followed ? t("portfolio.tile.followedTitle") : t("portfolio.tile.followTitle")}
                     data-testid={`table-follow-${stock.ticker}`}
                     className={`inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-1)] type-body transition-colors ${followed ? "text-[var(--brand-text)]" : "text-[var(--ink-muted)] hover:text-[var(--ink)]"}`}
                   >
@@ -1014,7 +1019,7 @@ export default function PortfolioPage() {
   const qualifyRefreshSummary = (summary: string) => {
     const subject = refreshSubjectRef.current;
     if (!subject || (subject.filter === gridFilter && subject.search === gridSearch)) return summary;
-    return `${summary} · for the stocks visible when you pressed Refresh`;
+    return t("portfolio.news.summary.qualified", { summary });
   };
 
   const toggleFollow = useMutation({
@@ -1046,12 +1051,12 @@ export default function PortfolioPage() {
       setRefreshSummary(null);
     },
     onSuccess: (response) => {
-      setRefreshSummary(qualifyRefreshSummary(summarizeAcquisition(response)));
+      setRefreshSummary(qualifyRefreshSummary(summarizeAcquisition(response, t)));
       setNewsFetchedAt(Date.now());
       void queryClient.invalidateQueries({ queryKey: ["portfolio-news"] });
     },
     onError: (error) => {
-      setRefreshSummary(qualifyRefreshSummary(error instanceof Error ? error.message : "Refresh failed"));
+      setRefreshSummary(qualifyRefreshSummary(error instanceof Error ? error.message : t("portfolio.news.summary.failedFallback")));
     },
   });
 
@@ -1395,8 +1400,8 @@ export default function PortfolioPage() {
     onSuccess: async (payload) => {
       setMutationMessage(
         payload.weight > 0
-          ? `Saved ${payload.ticker} with an active portfolio allocation.`
-          : `Saved ${payload.ticker} as a tracked holding with 0.0% portfolio allocation.`,
+          ? t("portfolio.mutation.saved", { ticker: payload.ticker })
+          : t("portfolio.mutation.savedTracked", { ticker: payload.ticker }),
       );
       setNewTicker("");
       setNewName("");
@@ -1406,7 +1411,7 @@ export default function PortfolioPage() {
       await refreshPortfolioQueries();
     },
     onError: (error) => {
-      setMutationMessage(error instanceof Error ? error.message : "Failed to add holding.");
+      setMutationMessage(error instanceof Error ? error.message : t("portfolio.mutation.addFailed"));
     },
   });
 
@@ -1416,11 +1421,11 @@ export default function PortfolioPage() {
         method: "DELETE",
       }),
     onSuccess: async ({ ticker }) => {
-      setMutationMessage(`Removed ${ticker} from the watchlist.`);
+      setMutationMessage(t("portfolio.mutation.removed", { ticker }));
       await refreshPortfolioQueries();
     },
     onError: (error) => {
-      setMutationMessage(error instanceof Error ? error.message : "Failed to remove holding.");
+      setMutationMessage(error instanceof Error ? error.message : t("portfolio.mutation.removeFailed"));
     },
   });
 
@@ -1431,10 +1436,10 @@ export default function PortfolioPage() {
       }),
     onSuccess: async (result) => {
       await refreshPortfolioQueries();
-      setMutationMessage(`Imported ${result.item_count} holdings from stock_targets.json into the DB watchlist.`);
+      setMutationMessage(t("portfolio.mutation.imported", { count: result.item_count }));
     },
     onError: (error) => {
-      setMutationMessage(error instanceof Error ? error.message : "Failed to resync watchlist.");
+      setMutationMessage(error instanceof Error ? error.message : t("portfolio.mutation.resyncFailed"));
     },
   });
 
@@ -1445,10 +1450,10 @@ export default function PortfolioPage() {
       }),
     onSuccess: async (result) => {
       await refreshPortfolioQueries();
-      setMutationMessage(`Exported ${result.item_count} holdings to data/exports/watchlist-export.json.`);
+      setMutationMessage(t("portfolio.mutation.exported", { count: result.item_count }));
     },
     onError: (error) => {
-      setMutationMessage(error instanceof Error ? error.message : "Failed to sync watchlist to JSON.");
+      setMutationMessage(error instanceof Error ? error.message : t("portfolio.mutation.syncFailed"));
     },
   });
 
@@ -1456,13 +1461,13 @@ export default function PortfolioPage() {
     event.preventDefault();
     const ticker = newTicker.trim().toUpperCase();
     if (!ticker) {
-      setMutationMessage("Ticker is required.");
+      setMutationMessage(t("portfolio.mutation.tickerRequired"));
       return;
     }
 
     const parsedWeightPercent = Number(newWeightPercent.trim() || "0");
     if (!addToWatchlistOnly && (!Number.isFinite(parsedWeightPercent) || parsedWeightPercent < 0 || parsedWeightPercent > 100)) {
-      setMutationMessage("Initial allocation must be between 0 and 100%.");
+      setMutationMessage(t("portfolio.mutation.allocationRange"));
       return;
     }
 
@@ -1539,7 +1544,7 @@ export default function PortfolioPage() {
         }
         : current
     ));
-    setMutationMessage(`Updated sector for ${stock.ticker}.`);
+    setMutationMessage(t("portfolio.mutation.updatedSector", { ticker: stock.ticker }));
   };
 
   const handleUpdateStockTheme = async (stock: PortfolioStock, themeId: string) => {
@@ -1567,7 +1572,7 @@ export default function PortfolioPage() {
         .filter((stock) => stock.weight > 0),
     );
     if (normalized.length === 0) {
-      setMutationMessage("Assign positive weights before normalizing.");
+      setMutationMessage(t("portfolio.mutation.assignPositive"));
       return;
     }
 
@@ -1589,26 +1594,26 @@ export default function PortfolioPage() {
       setSavingAllocationTickers([]);
     }
     setWeightDrafts({});
-    setMutationMessage("Normalized saved stock weights to 100.0% invested.");
+    setMutationMessage(t("portfolio.mutation.normalized"));
     if (applyAllocationToSnapshot) {
       try {
         const refreshed = await savePortfolioSnapshot();
         await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-summary"] });
         setPortfolioComparisonMode("snapshot");
-        setPortfolioComparisonMessage(`Normalized weights and updated the ${formatDateLabel(refreshed.snapshot.as_of_date)} snapshot.`);
+        setPortfolioComparisonMessage(t("portfolio.mutation.normalizedSnapshot", { date: formatDateLabel(refreshed.snapshot.as_of_date) }));
       } catch (error) {
-        setPortfolioComparisonMessage(error instanceof Error ? error.message : "Failed to update the snapshot after normalizing weights.");
+        setPortfolioComparisonMessage(error instanceof Error ? error.message : t("portfolio.mutation.normalizeSnapshotFailed"));
       }
     }
   };
 
   const handleImportJson = async () => {
     if (!importJsonArmed) {
-      setMutationMessage("Arm Import JSON before replacing the DB watchlist from file.");
+      setMutationMessage(t("portfolio.mutation.armImport"));
       return;
     }
     const confirmed = window.confirm(
-      "Import JSON will replace the current DB watchlist with stock_targets.json contents. Saved DB weights and holdings not present in the file can be overwritten. Continue?",
+      t("portfolio.mutation.importConfirm"),
     );
     if (!confirmed) return;
     setMutationMessage(null);
@@ -1666,8 +1671,8 @@ export default function PortfolioPage() {
         });
         setMutationMessage(
           pendingChanges.length === 1
-            ? `Saved allocation for ${pendingChanges[0].stock.ticker}.`
-            : `Saved ${pendingChanges.length} allocation changes automatically.`,
+            ? t("portfolio.mutation.savedAllocation", { ticker: pendingChanges[0].stock.ticker })
+            : t("portfolio.mutation.savedAllocations", { count: pendingChanges.length }),
         );
         if (applyAllocationToSnapshot) {
           try {
@@ -1675,20 +1680,20 @@ export default function PortfolioPage() {
             await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-summary"] });
             setPortfolioComparisonMode("snapshot");
             setPortfolioComparisonMessage(
-              `Saved allocation changes and updated the ${formatDateLabel(refreshed.snapshot.as_of_date)} snapshot.`,
+              t("portfolio.mutation.savedAllocationSnapshot", { date: formatDateLabel(refreshed.snapshot.as_of_date) }),
             );
           } catch (error) {
-            setPortfolioComparisonMessage(error instanceof Error ? error.message : "Failed to update the snapshot after saving allocation changes.");
+            setPortfolioComparisonMessage(error instanceof Error ? error.message : t("portfolio.mutation.savedAllocationSnapshotFailed"));
           }
         }
       } catch (error) {
-        setMutationMessage(error instanceof Error ? error.message : "Failed to save allocation changes.");
+        setMutationMessage(error instanceof Error ? error.message : t("portfolio.mutation.saveAllocationFailed"));
       } finally {
         allocationAutoSaveInFlightRef.current = false;
         setSavingAllocationTickers([]);
       }
     })();
-  }, [applyAllocationToSnapshot, debouncedWeightDraftsKey, persistWatchlistItem, queryClient, savePortfolioSnapshot, watchlist]);
+  }, [applyAllocationToSnapshot, debouncedWeightDraftsKey, persistWatchlistItem, queryClient, savePortfolioSnapshot, t, watchlist]);
 
   useEffect(() => {
     if (!portfolioPreferencesQuery.data || totalInvestmentAutoSaveInFlightRef.current) return;
@@ -1700,7 +1705,7 @@ export default function PortfolioPage() {
     setSavingTotalInvestment(true);
     void persistPortfolioPreferences(parsedAmount)
       .then((response) => {
-        setMutationMessage(`Saved total investment amount (${formatCurrencyCompact(response.total_investment_amount)}).`);
+        setMutationMessage(t("portfolio.mutation.savedTotal", { amount: formatCurrencyCompact(response.total_investment_amount) }));
       })
       .catch((error: unknown) => {
         setMutationMessage(error instanceof Error ? error.message : "Failed to save total investment amount.");
@@ -1709,7 +1714,7 @@ export default function PortfolioPage() {
         totalInvestmentAutoSaveInFlightRef.current = false;
         setSavingTotalInvestment(false);
       });
-  }, [debouncedTotalInvestmentInput, persistPortfolioPreferences, portfolioPreferences, portfolioPreferencesQuery.data]);
+  }, [debouncedTotalInvestmentInput, persistPortfolioPreferences, portfolioPreferences, portfolioPreferencesQuery.data, t]);
 
   const handleAllocationValueDoubleClick = (stock: PortfolioStock) => {
     setEditingAllocationTicker(stock.ticker);
@@ -1740,8 +1745,8 @@ export default function PortfolioPage() {
     setPortfolioAnalysisRefreshToken(`${Date.now()}`);
     setPortfolioAnalysisMessage(
       canRunAttribution
-        ? "Refreshing portfolio comparison and attribution."
-        : "Refreshing portfolio comparison. Attribution stays paused until saved weights are 100% or below.",
+        ? t("portfolio.analysis.refreshing")
+        : t("portfolio.analysis.refreshingPaused"),
     );
   };
 
@@ -1753,7 +1758,7 @@ export default function PortfolioPage() {
       setNewSector(stock.sector);
       setAddToWatchlistOnly(false);
       setNewWeightPercent(stock.weight > 0 ? (stock.weight * 100).toFixed(1) : "5");
-      setMutationMessage(`Prepared ${stock.ticker} in Manual Add so you can save it back into the portfolio with an allocation.`);
+      setMutationMessage(t("portfolio.mutation.prepared", { ticker: stock.ticker }));
       requestAllocationFocus(null);
       return;
     }
@@ -1800,11 +1805,11 @@ export default function PortfolioPage() {
               </div>
                 <label className="flex items-center gap-2 type-small text-[var(--ink-muted)]">
                   <InfoTooltip
-                    label="Benchmark"
-                    description="Manual benchmark ticker input always wins. Presets are just fast selectors for common baselines. Whatever benchmark is active when you save a snapshot is stored with that snapshot for historical consistency."
+                    label={t("portfolio.benchmark.label")}
+                    description={t("portfolio.benchmark.help")}
                   />
                   <input
-                    aria-label="Portfolio benchmark ticker"
+                    aria-label={t("portfolio.benchmark.tickerAria")}
                     value={portfolioComparisonBenchmarkTicker}
                     onChange={(event) => {
                       setPortfolioComparisonBenchmarkTicker(event.target.value.toUpperCase());
@@ -1814,11 +1819,11 @@ export default function PortfolioPage() {
                 </label>
                 <label className="flex items-center gap-2 type-small text-[var(--ink-muted)]">
                   <InfoTooltip
-                    label="Benchmark preset"
-                    description="Use presets for the common S&P 500 or Korea-market baselines. Selecting Manual ticker means the current benchmark symbol does not match one of the preset shortcuts."
+                    label={t("portfolio.benchmark.presetLabel")}
+                    description={t("portfolio.benchmark.presetHelp")}
                   />
                   <select
-                    aria-label="Portfolio benchmark preset"
+                    aria-label={t("portfolio.benchmark.presetAria")}
                     value={benchmarkPresetIdForTicker(portfolioComparisonBenchmarkTicker)}
                     onChange={(event) => {
                       const selectedPreset = PORTFOLIO_BENCHMARK_PRESETS.find((preset) => preset.id === event.target.value);
@@ -1833,7 +1838,7 @@ export default function PortfolioPage() {
                         {preset.label}
                       </option>
                     ))}
-                    <option value="custom">Manual ticker</option>
+                    <option value="custom">{t("portfolio.benchmark.manualOption")}</option>
                   </select>
                 </label>
     </PeriodControl>
@@ -1866,8 +1871,8 @@ export default function PortfolioPage() {
             <KpiSkeletonCard />
           </section>
           <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <ChartSkeleton title="Loading attribution allocation" />
-            <ChartSkeleton title="Loading attribution effects" />
+            <ChartSkeleton title={t("portfolio.skeleton.allocation")} />
+            <ChartSkeleton title={t("portfolio.skeleton.effects")} />
           </section>
         </>
       )}
@@ -1884,8 +1889,8 @@ export default function PortfolioPage() {
       )}
       {attributionView.showNoHoldings && !watchlistQuery.isError && (
         <StatusPanel
-          title="Attribution Pending Portfolio"
-          message="Attribution charts will appear once the watchlist has at least one holding."
+          title={t("portfolio.status.pendingTitle")}
+          message={t("portfolio.status.pendingMessage")}
         />
       )}
 
@@ -1898,16 +1903,16 @@ export default function PortfolioPage() {
 
       {weightsOverflow && (
         <StatusPanel
-          title="Allocation Weights Exceed 100%"
-          message={`Saved watchlist allocations currently sum to ${formatNumber(totalStoredWeight, "percent", { digits: 1 })}. Reduce total assigned weight to 100% or below before attribution can run.`}
+          title={t("portfolio.status.overflowTitle")}
+          message={t("portfolio.status.overflowMessage", { weight: formatNumber(totalStoredWeight, "percent", { digits: 1 }) })}
           tone="warning"
         />
       )}
 
       {attributionView.showError && (
         <StatusPanel
-          title="Attribution Engine Unavailable"
-          message="Attribution request failed. Check API health or input constraints and retry."
+          title={t("portfolio.status.engineTitle")}
+          message={t("portfolio.status.engineMessage")}
           tone="warning"
         />
       )}
@@ -1928,7 +1933,7 @@ export default function PortfolioPage() {
 
         <div className="mt-4 grid min-w-72 grid-cols-1 gap-2 sm:grid-cols-5">
           <div className="bg-[var(--surface)] p-3 type-small">
-            <div className="text-[var(--ink-muted)]">Tracked Names</div>
+            <div className="text-[var(--ink-muted)]">{t("portfolio.kpi.trackedNames")}</div>
             <div className="type-figure-md mt-1 text-[var(--ink)]">{watchlist.length}</div>
           </div>
           <div className="bg-[var(--surface)] p-3 type-small">
@@ -2118,7 +2123,7 @@ export default function PortfolioPage() {
             ) : null}
             {/* Same reason: normalize-weights and save-allocation both write this from the
                 allocation panel, but it used to render only inside the snapshot panel, so
-                "Failed to update the snapshot after saving allocation changes." was never seen. */}
+                t("portfolio.mutation.savedAllocationSnapshotFailed") was never seen. */}
             {portfolioComparisonMessage ? (
               <p data-testid="portfolio-comparison-message" className="px-4 pt-3 type-body text-[var(--ink-muted)]">
                 {portfolioComparisonMessage}

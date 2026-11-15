@@ -1,5 +1,8 @@
 import { fetchApi, buildApiUrl } from "@/lib/api";
 import type { NewsArticle } from "@/app/portfolio/page";
+import type { MessageKey } from "@/lib/i18n/translate";
+
+type Translate = (key: MessageKey, params?: Record<string, string | number>) => string;
 
 export interface BulkNewsEntry {
   articles: NewsArticle[];
@@ -107,24 +110,24 @@ function nameSome(tickers: string[]): string {
   return `${named}${tickers.length > 2 ? ` +${tickers.length - 2}` : ""}`;
 }
 
-export function summarizeAcquisition(response: NewsAcquireResponse): string {
+export function summarizeAcquisition(response: NewsAcquireResponse, t: Translate): string {
   const skipped = response.skipped_unknown ?? [];
   const parts: string[] = [];
 
   if (response.results.length === 0) {
     // "0 refreshed · 0 already current" is a report about work that never happened, and
     // it reads as a clean run. Nothing was requested, or nothing came back; say that.
-    parts.push("Nothing to refresh");
+    parts.push(t("portfolio.news.summary.nothing"));
   } else {
     const acquired = response.results.filter((r) => r.status === "acquired").length;
     const current = response.results.filter((r) => r.status === "fresh" || r.status === "empty").length;
     const failed = response.results.filter((r) => r.status === "failed");
 
-    parts.push(`${acquired} refreshed`, `${current} already current`);
+    parts.push(t("portfolio.news.summary.refreshed", { count: acquired }), t("portfolio.news.summary.current", { count: current }));
     if (failed.length > 0) {
       // Name failures rather than counting them anonymously: "3 failed" tells the user
       // nothing they can act on.
-      parts.push(`${failed.length} failed (${nameSome(failed.map((r) => r.ticker))})`);
+      parts.push(t("portfolio.news.summary.failed", { count: failed.length, tickers: nameSome(failed.map((r) => r.ticker)) }));
     }
   }
 
@@ -132,7 +135,7 @@ export function summarizeAcquisition(response: NewsAcquireResponse): string {
     // The backend reports the tickers it could not resolve. Dropping that line leaves a
     // typo'd or delisted ticker sitting in the watchlist looking exactly like a stock
     // that simply has no news, which is the one reading it must not have.
-    parts.push(`${skipped.length} not recognised (${nameSome(skipped)})`);
+    parts.push(t("portfolio.news.summary.notRecognised", { count: skipped.length, tickers: nameSome(skipped) }));
   }
 
   return parts.join(" · ");
