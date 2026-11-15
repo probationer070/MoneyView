@@ -343,6 +343,8 @@ test("normalize is not undone by a stale debounced weight draft", async ({ page 
   await expect.poll(() => stats.watchlistSaves?.slice(savesBeforeNormalize).at(-1)?.weight).toBe(1);
   await expect(page.getByText("Normalized saved stock weights to 100.0% invested.")).toBeVisible();
   // Let the 450 ms debounce window pass so a stale auto-save would have fired by now.
+  // waitForTimeout exception (owner 2026-11-16, HARNESS fixed rules): this asserts that a save
+  // does NOT happen, so there is no condition to wait on; time has to pass.
   await page.waitForTimeout(1000);
 
   const savesAfterNormalize = stats.watchlistSaves?.slice(savesBeforeNormalize) ?? [];

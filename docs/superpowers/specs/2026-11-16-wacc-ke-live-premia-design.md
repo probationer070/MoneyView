@@ -109,3 +109,17 @@ Choose R3 (DGS10 cache, dated fallback) + E1 (owner-set ERP with source and as-o
 8. When assumptions are missing (no FRED cache, no fallback row): refuse WACC with a visible reason (recommended) or show the last stored value with an "unverified" note? This is also the open point of the deferred invalid-audit decision (todo line 79); recommend one rule for both.
 9. Scope: Monte Carlo rf input (separate user field, Sharpe only) and the valuation-case `riskfree_rate` (dated by `as_of_date`) stay untouched. Confirm.
 10. Sequencing: do this before or together with the deferred "invalid audit shows slider value" rebuild? Recommended: together, since both change what the WACC tile shows when inputs are unusable.
+
+
+## 6. Owner answers (2026-11-16: "추천대로", all recommendations accepted)
+
+1. DGS10 is the risk-free rate for every ticker.
+2. ERP is owner-entered with source and as-of date; seeded 5.5% as of 2026-11-16 (so day-one numbers are unchanged).
+3. The frontend implied-ERP card stays display-only.
+4. rf older than 7 days falls back to the owner-set value; ERP older than 120 days shows a stale badge; staleness alone never refuses.
+5. CRP keeps its rule (0 for USD/CAD/EUR reporters, else 0.8%), with the 0.8% dated in `market_assumptions`.
+6. Saved WACC rows that drift: a report lists them and the owner re-saves; no auto-recompute.
+7. Decisions and comparison snapshots keep their frozen rf/ERP.
+8. No rf/ERP at all (no cache, no fallback row): WACC is refused with a visible reason; the same rule replaces the deferred "invalid audit shows the slider value" decision.
+9. Monte Carlo rf and valuation-case rf are out of scope.
+10. Done together with the WACC tile / invalid-audit rebuild.
