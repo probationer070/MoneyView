@@ -8,7 +8,7 @@ import { mockPortfolioPageApi } from "./helpers/portfolioPageMock";
 // "no news"; the crawler now propagates failures. A tile that renders a failed bulk fetch
 // as the never-checked placeholder puts the same claim back on screen.
 
-const RAIL_REFRESH = /^(Refresh news|News updated \d+ min ago)$/;
+const RAIL_REFRESH = /^(Refresh news|News updated \d+ min ago|News updated just now)$/;
 
 async function gotoGrid(page: Page) {
   await page.goto("/portfolio", { waitUntil: "domcontentloaded" });

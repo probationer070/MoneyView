@@ -76,7 +76,7 @@ test("news is fetched once on first load, not again after switching tabs, and th
     if (new URL(request.url()).pathname.endsWith("/news/acquire") && request.method() === "POST") acquireRequests += 1;
   });
   await gotoStocks(page);
-  const quiet = page.getByRole("button", { name: /News updated \d+ min ago/ });
+  const quiet = page.getByRole("button", { name: /News updated (just now|\d+ min ago)/ });
   await expect(quiet).toBeVisible();
   expect(acquireRequests).toBe(1);
 
@@ -88,6 +88,11 @@ test("news is fetched once on first load, not again after switching tabs, and th
 
   await quiet.click();
   await expect.poll(() => acquireRequests).toBe(2);
+});
+
+test("right after the automatic news fetch the quiet button says updated just now", async ({ page }) => {
+  await gotoStocks(page);
+  await expect(page.getByRole("button", { name: "News updated just now" })).toBeVisible();
 });
 
 test("the subtitle shows the stock count and the weight total", async ({ page }) => {

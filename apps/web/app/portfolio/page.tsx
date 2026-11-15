@@ -2045,7 +2045,9 @@ export default function PortfolioPage() {
               <RefreshCw className={`h-3.5 w-3.5 ${refreshNews.isPending ? "animate-spin" : ""}`} />
               {newsFetchedAt === null
                 ? t("portfolio.news.never")
-                : t("portfolio.news.updated", { minutes: formatNumber(Math.max(0, Math.floor((nowMs - newsFetchedAt) / 60_000)), "integer") })}
+                : Math.floor((nowMs - newsFetchedAt) / 60_000) < 1
+                  ? t("portfolio.news.justNow")
+                  : t("portfolio.news.updated", { minutes: formatNumber(Math.max(0, Math.floor((nowMs - newsFetchedAt) / 60_000)), "integer") })}
             </button>
           </div>
         {refreshSummary ? (

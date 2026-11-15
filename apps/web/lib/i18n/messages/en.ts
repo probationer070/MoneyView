@@ -21,7 +21,7 @@ export const en = {
     title: "Portfolio",
     tabs: { label: "Portfolio views", stocks: "Stocks", weights: "Weights", attribution: "Attribution" },
     addStock: { title: "Add stock", open: "+ Add stock", search: "Search", placeholder: "Search ticker, name, or sector", add: "+ Add", added: "Already added", empty: "No matching stocks in the company registry." },
-    news: { never: "Refresh news", updated: "News updated {minutes} min ago" },
+    news: { never: "Refresh news", updated: "News updated {minutes} min ago", justNow: "News updated just now" },
     subtitle: "{count} stocks · weights total {weight}",
     view: { label: "View", cards: "Cards", table: "Table", follow: "Follow" },
     period: { trigger: "Period {start} – {end}", defaultStart: "default", latest: "latest", dialog: "Period and benchmark" },
