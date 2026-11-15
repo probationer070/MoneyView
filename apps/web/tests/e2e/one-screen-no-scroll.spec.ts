@@ -60,7 +60,7 @@ for (const viewport of VIEWPORTS) {
 test.describe("portfolio tabs at 1280x720", () => {
   test.use({ viewport: { width: 1280, height: 720 } });
 
-  for (const tab of ["Stocks", "Weights", "Attribution"] as const) {
+  for (const tab of ["Stocks", "Weights"] as const) {
     test(`${tab}: the page does not scroll and the header stays put`, async ({ page }) => {
       const watchlist = Array.from({ length: 24 }, (_, index) => ({
         ticker: `TST${index + 1}`, name: `Test Holding ${index + 1}`, sector: "Technology", group_name: "built_in",
@@ -77,11 +77,9 @@ test.describe("portfolio tabs at 1280x720", () => {
 
       const region = page.getByTestId("portfolio-scroll-region");
       const before = await heading.boundingBox();
-      if (tab !== "Attribution") {
-        expect(await region.evaluate((el) => el.scrollHeight > el.clientHeight), `${tab}: the panel region overflows`).toBe(true);
-        await region.evaluate((el) => { el.scrollTop = el.scrollHeight; });
-        expect(await region.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
-      }
+      expect(await region.evaluate((el) => el.scrollHeight > el.clientHeight), `${tab}: the panel region overflows`).toBe(true);
+      await region.evaluate((el) => { el.scrollTop = el.scrollHeight; });
+      expect(await region.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
       expect((await heading.boundingBox())!.y, "the header did not scroll away").toBe(before!.y);
       await expectNoPageScroll(page, `/portfolio ${tab} after scrolling the panel`);
     });

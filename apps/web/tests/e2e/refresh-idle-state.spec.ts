@@ -11,7 +11,6 @@ const CORPORATE_QUARTERLY_CACHE_KEY = "moneyview:corporate-quarterly-statements-
 const CORPORATE_PRICE_HISTORY_CACHE_KEY = "moneyview:corporate-price-history-cache:v1";
 const CORPORATE_ACTIVE_TICKER_KEY = "moneyview:corporate-active-ticker:v1";
 const PORTFOLIO_COMPARISON_CACHE_KEY = "moneyview.portfolio.comparison-cache.v1";
-const PORTFOLIO_ATTRIBUTION_CACHE_KEY = "moneyview.portfolio.attribution-cache.v1";
 
 function corporateStats(): CorporatePageMockStats {
   return {
@@ -328,10 +327,9 @@ test("corporate page refresh labels stale source-data cache for a different sele
   expect(stats.ohlcvRequests).toBe(0);
 });
 
-test("portfolio first load auto-loads the latest comparison snapshot while history and attribution stay idle until refresh", async ({ page }) => {
+test("portfolio first load auto-loads the latest comparison snapshot while history stays idle until refresh", async ({ page }) => {
   const stats: PortfolioPageMockStats = {
     comparisonRequests: 0,
-    attributionRequests: 0,
     stockDetailRequests: 0,
     stockSnapshotHistoryRequests: 0,
   };
@@ -340,17 +338,13 @@ test("portfolio first load auto-loads the latest comparison snapshot while histo
   await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: "Portfolio", exact: true })).toBeVisible({ timeout: 60_000 });
-  await openPortfolioPanel(page, "attribution");
-  await expect(page.getByText("Attribution stays idle on first load. Click Refresh Analysis when you want current portfolio attribution.")).toBeVisible();
   await page.waitForTimeout(300);
   expect(stats.comparisonRequests).toBe(1);
-  expect(stats.attributionRequests).toBe(0);
 });
 
-test("portfolio renders cached analysis without auto-fetch, refreshes on demand, and keeps detail fetches modal-gated", async ({ page }) => {
+test("portfolio renders cached analysis without auto-fetch and keeps detail fetches modal-gated", async ({ page }) => {
   const stats: PortfolioPageMockStats = {
     comparisonRequests: 0,
-    attributionRequests: 0,
     stockDetailRequests: 0,
     stockSnapshotHistoryRequests: 0,
   };
@@ -420,97 +414,16 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
       },
       lastUpdatedAt: "2026-04-10T09:00:00Z",
     },
-    [PORTFOLIO_ATTRIBUTION_CACHE_KEY]: {
-      snapshot: {
-        tickers: ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"],
-        weights: [0.2, 0.2, 0.2, 0.2, 0.2],
-        benchmarkTicker: "^GSPC",
-        holdingStartDate: "",
-        attributionAsOfDate: "",
-      },
-      result: {
-        totals: {
-          portfolio_return: 0.08,
-          benchmark_return: 0.07,
-        },
-        active_return: 0.01,
-        effects: {
-          allocation: 0.004,
-          selection: 0.0035,
-          interaction: 0.0025,
-        },
-        sector_breakdowns: [
-          {
-            sector: "Technology",
-            portfolio_weight: 1,
-            benchmark_weight: 1,
-            portfolio_return: 0.08,
-            benchmark_return: 0.07,
-            allocation_effect: 0.004,
-            selection_effect: 0.0035,
-            interaction_effect: 0.0025,
-            active_contribution: 0.01,
-          },
-        ],
-        risk_metrics: {
-          beta: 1.1,
-          beta_rolling_window: 252,
-          var_95_1d: -0.021,
-          es_95_1d: -0.032,
-          var_method: "historical",
-          es_method: "historical",
-        },
-        metadata: {
-          method: "brinson_fachler_arithmetic",
-          benchmark: "^GSPC",
-          benchmark_weights_source: "provider_derived",
-          period: "5y",
-          generated_at: "2026-04-10T09:00:00Z",
-          portfolio_hash: "cached",
-          cache_key: "cached",
-          cache_hit: true,
-          data_contract: {
-            return_frequency: "daily",
-            rebalancing_assumption: "bop",
-            timezone_cutoff: "16:00:00",
-            timezone: "UTC",
-            currency: "USD",
-            fx_handling: "none_usd_only",
-            corporate_actions: "split_and_dividend_adjusted_total_return",
-            benchmark_source: "cached",
-            sector_taxonomy: "watchlist_sector_gics_like",
-            missing_data_fallback: "cached",
-          },
-          data_quality: {
-            synthetic_data_used: false,
-            synthetic_tickers: [],
-            benchmark_proxy_used: false,
-            benchmark_proxy_method: null,
-            limitations: [],
-          },
-        },
-      },
-      lastUpdatedAt: "2026-04-10T09:00:00Z",
-    },
   });
   await mockPortfolioPageApi(page, stats);
 
   await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: "Portfolio", exact: true })).toBeVisible({ timeout: 60_000 });
-  // The cached portfolio return renders in the attribution panel.
-  await openPortfolioPanel(page, "attribution");
-  await expect(page.getByText("8.0%").first()).toBeVisible();
   await page.waitForTimeout(300);
   expect(stats.comparisonRequests).toBe(1);
-  expect(stats.attributionRequests).toBe(0);
   expect(stats.stockDetailRequests).toBe(0);
   expect(stats.stockSnapshotHistoryRequests).toBe(0);
-
-  await page.getByRole("button", { name: "Refresh Analysis" }).click();
-  await expect.poll(() => stats.comparisonRequests).toBe(2);
-  await expect.poll(() => stats.attributionRequests).toBe(1);
-  await expect(page.getByText(/Refreshing portfolio comparison and attribution\./)).toBeVisible();
 
   await openPortfolioPanel(page, "allocation");
   await page.getByLabel("Add to Watchlist only").check();
@@ -520,7 +433,6 @@ test("portfolio renders cached analysis without auto-fetch, refreshes on demand,
   await page.getByRole("button", { name: "Save Manual Ticker" }).click();
   await expect(page.getByText("Saved ORCL as a tracked holding with 0.0% portfolio allocation.")).toBeVisible();
   await page.waitForTimeout(300);
-  expect(stats.attributionRequests).toBe(1);
 
   expect(stats.stockDetailRequests).toBe(0);
   expect(stats.stockSnapshotHistoryRequests).toBe(0);

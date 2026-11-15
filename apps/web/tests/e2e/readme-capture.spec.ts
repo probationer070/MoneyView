@@ -143,7 +143,7 @@ test("portfolio panels", async ({ page }) => {
   await mockPortfolioPageApi(page);
   await page.goto("/portfolio", { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { name: "Portfolio", exact: true })).toBeVisible({ timeout: 60_000 });
-  for (const panel of ["attribution", "allocation", "holdings"] as const) {
+  for (const panel of ["allocation", "holdings"] as const) {
     await openPortfolioPanel(page, panel);
     await shot(page, `portfolio-${panel}`);
   }

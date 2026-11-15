@@ -22,12 +22,11 @@ export const ko: Messages = {
   delta: { up: "상승", down: "하락", flat: "보합" },
   portfolio: {
     title: "포트폴리오",
-    tabs: { label: "포트폴리오 보기", stocks: "종목", weights: "비중", attribution: "성과 기여" },
+    tabs: { label: "포트폴리오 보기", stocks: "종목", weights: "비중" },
     addStock: { title: "종목 추가", open: "+ 종목 추가", search: "검색", placeholder: "종목 코드, 이름 또는 업종 검색", add: "+ 추가", added: "이미 추가됨", empty: "기업 목록에서 일치하는 종목을 찾지 못했습니다." },
     news: { never: "뉴스 갱신", updated: "뉴스 {minutes}분 전 갱신", justNow: "뉴스 방금 갱신", summary: { nothing: "새로고침할 항목 없음", refreshed: "{count}개 갱신", current: "{count}개 이미 최신", failed: "{count}개 실패 ({tickers})", notRecognised: "{count}개 인식 못함 ({tickers})", qualified: "{summary} · 새로고침을 누른 시점에 보이던 종목 기준", failedFallback: "새로고침 실패" } },
     subtitle: "관심 종목 {count}개 · 비중 합계 {weight}",
     view: { label: "보기 방식", cards: "카드", table: "표", follow: "관심" },
-    period: { trigger: "기간 {start} ~ {end}", defaultStart: "기본", latest: "최신", dialog: "기간 및 벤치마크", startLabel: "보유 시작일", startHelp: "수익률, 성과 기여 분석, 베타를 계산할 시작점을 정합니다. 종목을 추가했거나 포지션을 처음 보유한 날짜를 쓰십시오. 실제 보유 기간이 더 짧을 때 여러 해 동안 오른 종목의 수익률이 과대하게 보이는 것을 막습니다.", endLabel: "수익률 종료일", endHelp: "수익률, 성과 기여 분석, 베타를 계산할 종료일을 정합니다. 비워 두면 캐시에 있는 가장 최근 시장 날짜를 씁니다." },
     grid: {
       filter: "그룹 필터",
       search: "종목 검색",
@@ -53,31 +52,7 @@ export const ko: Messages = {
       followTitle: "관심 종목으로 추가",
       followedTitle: "관심 종목 · 눌러서 해제",
     },
-    analysis: {
-      refresh: "분석 새로고침",
-      idleTitle: "성과 기여 분석 대기 중",
-      idleMessage: "처음 열었을 때는 성과 기여 분석을 대기합니다. 현재 포트폴리오의 성과 기여를 계산하려면 분석 새로고침을 누르십시오.",
-      addHoldingsFirst: "포트폴리오 분석을 새로고침하기 전에 보유 종목을 추가하십시오.",
-      refreshing: "포트폴리오 비교와 성과 기여 분석을 새로고침하는 중입니다.",
-      refreshingPaused: "포트폴리오 비교를 새로고침하는 중입니다. 저장된 비중이 100% 이하가 될 때까지 성과 기여 분석은 일시 중지됩니다.",
-    },
-    benchmark: {
-      label: "벤치마크",
-      help: "벤치마크 티커를 직접 입력하면 항상 이 값이 우선합니다. 프리셋은 자주 쓰는 기준 지수를 빠르게 고르는 바로가기입니다. 스냅샷을 저장할 때 활성화된 벤치마크는 과거와 일관되게 비교할 수 있도록 그 스냅샷과 함께 저장됩니다.",
-      presetLabel: "벤치마크 프리셋",
-      presetHelp: "S&P 500 또는 한국 시장의 대표 기준 지수는 프리셋으로 고르십시오. 직접 입력 티커를 고르면 현재 벤치마크 심볼이 프리셋 바로가기 중 하나와 일치하지 않는다는 뜻입니다.",
-      manualOption: "직접 입력 티커",
-      tickerAria: "포트폴리오 벤치마크 티커",
-      presetAria: "포트폴리오 벤치마크 프리셋",
-    },
-    skeleton: { allocation: "성과 기여 배분 불러오는 중", effects: "성과 기여 효과 불러오는 중" },
     status: {
-      pendingTitle: "성과 기여 분석 보류 · 보유 종목 없음",
-      pendingMessage: "관심 종목에 보유 종목이 하나 이상 생기면 성과 기여 차트가 표시됩니다.",
-      overflowTitle: "배분 비중이 100%를 초과함",
-      overflowMessage: "저장된 관심 종목 배분의 합계가 현재 {weight}입니다. 성과 기여 분석을 실행하려면 총 배분 비중을 100% 이하로 줄이십시오.",
-      engineTitle: "성과 기여 엔진 사용 불가",
-      engineMessage: "성과 기여 요청이 실패했습니다. API 상태 또는 입력 조건을 확인한 뒤 다시 시도하십시오.",
     },
     kpi: { trackedNames: "추적 종목" },
     detailLoading: "종목 상세 불러오는 중",
@@ -115,7 +90,7 @@ export const ko: Messages = {
       },
       layout: {
         title: "구성",
-        main: "본문에는 종목 타일이 있습니다. 오른쪽 아이콘 막대는 네 개의 패널(최신 스냅샷 요약, 성과 기여 분석, 배분 작업대, 관심종목 표)을 엽니다. 마지막 아이콘은 화면에 보이는 종목의 뉴스를 새로 받아 옵니다.",
+        main: "본문에는 종목 타일이 있습니다. 오른쪽 아이콘 막대는 세 개의 패널(최신 스냅샷 요약, 배분 작업대, 관심종목 표)을 엽니다. 마지막 아이콘은 화면에 보이는 종목의 뉴스를 새로 받아 옵니다.",
         panel: "패널은 타일 위로 밀려 나옵니다. Esc 키나 닫기 버튼으로 닫습니다.",
       },
       tiles: {
@@ -125,17 +100,6 @@ export const ko: Messages = {
         colour: "한국 시장 관례에 따라 ▲가 붙은 빨강은 상승, ▼가 붙은 파랑은 하락입니다.",
         news: "선 아래 칸에는 최근 헤드라인이 최대 세 건까지 발행 후 경과 시간과 함께 나옵니다. 헤드라인이 없으면 뉴스를 한 번도 확인하지 않았는지, 아직 불러오지 않았는지, 마지막 확인 때 없었는지를 구분해서 알려 줍니다.",
         follow: "모서리의 + 또는 ✓ 버튼은 종목을 관심 그룹에 넣거나 뺍니다. 타일 위의 필터는 관심, 관심 아님, 전체를 바꾸고, 개수 줄은 화면에 보이는 타일 수, 전체 수, 관심 종목 수를 보여 줍니다.",
-      },
-      window: {
-        title: "수익률 기간",
-        body: "보유 시작일과 수익률 종료일은 수익률, 성과 기여 분석, 베타의 계산 기간을 정합니다. 시작일을 비우면 기본 범위인 최근 5년을 쓰고, 종료일을 비우면 캐시에 있는 가장 최근 시장 날짜까지 계산합니다. 시작일은 실제로 보유한 날짜로 맞추십시오. 오래 보유한 상승 종목이 실제보다 좋아 보이지 않도록 하기 위해서입니다.",
-      },
-      attribution: {
-        title: "성과 기여 분석 패널",
-        kpi: "포트폴리오 수익률은 종목별 수익률에 비중을 곱해 더한 값입니다. 벤치마크 수익률은 벤치마크에 같은 방식으로 구한 값입니다. 초과 수익률은 앞의 값에서 뒤의 값을 뺀 것입니다. 베타는 포트폴리오가 벤치마크와 얼마나 같이 움직이는지 보여 줍니다. 1 안팎이면 시장과 비슷하고, 클수록 더 민감합니다.",
-        weights: "비중은 저장해 둔 배분입니다. 0보다 큰 비중이 없으면 동일 비중 바스켓으로 계산합니다. 저장된 비중의 합이 100%를 넘으면 낮출 때까지 분석을 멈춥니다.",
-        charts: "도넛 차트는 섹터별 배분을 보여 줍니다. 폭포 차트는 초과 수익률을 섹터별 배분 효과, 선택 효과, 상호작용 효과로 나눕니다(브린슨-파처 방식).",
-        idle: "처음 열었을 때는 분석을 대기합니다. 스냅샷 패널의 분석 새로고침을 누르면 계산합니다.",
       },
       snapshot: {
         title: "스냅샷 패널",
@@ -168,7 +132,6 @@ export const ko: Messages = {
       json: { exportAction: "관심 목록을 JSON으로 내보내기", exporting: "내보내는 중...", importAction: "JSON을 DB로 가져오기", importing: "가져오는 중...", armAria: "파괴적인 JSON 가져오기 실행 확인", armLabel: "JSON 가져오기를 실행하면 파일 기준으로 DB 관심 목록이 교체되며 저장된 비중이 덮어써질 수 있음을 이해했습니다.", help: "내보내기는 비중을 포함한 현재 DB 관심 목록을 data/exports/watchlist-export.json(git 무시, 개인 파일)에 기록합니다. 가져오기는 저장소에 커밋된 시드 파일로 관심 목록을 교체하며, 의도적으로 기존 데이터를 덮어씁니다.", syncSource: "마지막 동기화/가져오기 출처:", syncTime: "마지막 동기화/가져오기 시각:", jsonPath: "JSON 경로:", noneRecorded: "기록 없음", loading: "불러오는 중..." },
     },
     allocation: { title: "포트폴리오 표", help: "슬라이더를 끌어 비중을 빠르게 바꾸거나, 배분 값을 더블클릭해 정확한 값을 직접 입력하십시오. 배분과 투자 금액 변경은 자동으로 저장되며, 관심 종목 제거는 이 표가 아니라 보유 종목 영역에서 합니다.", totalInvestment: "총 투자금", totalInvestmentAria: "총 투자 금액", applyToSnapshot: "스냅샷에 적용", applyAria: "배분 변경을 스냅샷에 적용", normalize: "100%로 정규화", draftTotal: "초안 합계", projectedNetValue: "예상 순 가치", feeReserve: "거래 수수료 예비금", autoSave: "자동 저장 상태", saving: "저장 중...", synced: "동기화됨", overflow: "경고: 초안 배분 합계가 현재 {total}입니다. 계속 수정할 수 있지만, 저장된 비중이 100.0% 이하가 될 때까지 성과 기여 분석은 일시 중지됩니다.", noteFinalProfit: "`최종 수익`은 종목별 현재 DCF 가치와 현재가의 차이(일회성 격차, 비율이 아님)를 사용하고, 예상 청산 가치에서 `0.2%` 거래 수수료를 뺍니다. `스냅샷에 적용`을 선택한 경우에만 자동 저장된 배분 변경이 오늘 저장된 비교 스냅샷에 연결됩니다.", tableScrollAria: "포트폴리오 표 스크롤 영역", sliderAria: "{ticker} 배분 슬라이더", empty: "포트폴리오 표를 만들려면 종목 검색 패널에서 종목을 추가하십시오." },
-    attributionSummary: { kpi: { portfolioReturn: "포트폴리오 수익률", benchmarkReturn: "벤치마크 수익률", activeReturn: "초과 수익률", beta: "베타" }, benchmarkCriteria: "벤치마크 선정 기준", weightSource: "비중 출처", proxyMethod: "대리 지표 방식", directBenchmark: "직접 벤치마크 또는 기본 제공자 데이터", sectorAllocation: "섹터 배분", attributionEffects: "성과 기여 효과 (%)" },
     detail: {
       quickReview: { title: "빠른 포트폴리오 검토", body: "여기서 포트폴리오 작업을 계속하거나, 전체 상세 경로를 열어 종목을 단독으로 분석할 수 있습니다.", viewFull: "전체 상세 보기" },
       sector: { label: "섹터", aria: "종목 섹터", save: "섹터 저장", saving: "섹터 저장 중...", upToDate: "섹터가 이미 최신 상태입니다.", saved: "{ticker} 섹터를 저장했습니다.", failed: "섹터를 저장하지 못했습니다." },
@@ -2564,47 +2527,6 @@ export const ko: Messages = {
       off: "꺼짐",
       unknown: "알 수 없음",
       empty: "아직 평가한 경계 지표가 없습니다.",
-    },
-  },
-  attribution: {
-    waterfall: {
-      effects: {
-        allocation: {
-          name: "배분 효과",
-          represents: "포트폴리오가 벤치마크 대비 섹터를 과다 보유했는지 과소 보유했는지를 나타냅니다.",
-          calculation: "배분_i = (포트폴리오 비중_i − 벤치마크 비중_i) × (벤치마크 섹터 수익률_i − 벤치마크 전체 수익률); 전체 배분 효과는 섹터별 합계입니다.",
-        },
-        selection: {
-          name: "선택 효과",
-          represents: "선택한 종목이 대응하는 벤치마크 또는 섹터 수익률보다 높았는지 낮았는지를 나타냅니다.",
-          calculation: "선택_i = 벤치마크 비중_i × (포트폴리오 섹터 수익률_i − 벤치마크 섹터 수익률_i); 전체 선택 효과는 섹터별 합계입니다.",
-        },
-        interaction: {
-          name: "상호작용 효과",
-          represents: "섹터 비중의 능동적 차이와 종목 선택이 함께 작용한 결합 효과입니다.",
-          calculation: "상호작용_i = (포트폴리오 비중_i − 벤치마크 비중_i) × (포트폴리오 섹터 수익률_i − 벤치마크 섹터 수익률_i); 전체 상호작용 효과는 섹터별 합계입니다.",
-        },
-        activeReturn: {
-          name: "초과 수익률",
-          represents: "벤치마크 대비 포트폴리오의 총 초과 수익률입니다.",
-          calculation: "초과 수익률 = 포트폴리오 수익률 − 벤치마크 수익률 = 배분 효과 + 선택 효과 + 상호작용 효과입니다.",
-        },
-      },
-      driver: {
-        none: "이 효과에서 단일 섹터가 뚜렷하게 우위를 차지하지 않았습니다.",
-        top: "최대 섹터 기여 요인: {sector}, 기여도 {value}입니다.",
-      },
-      emptyTitle: "성과 귀속 효과 데이터가 없습니다",
-      emptyDescription: "배분, 선택, 상호작용 효과와 초과 수익률을 비교하려면 성과 귀속 결과를 새로 고치십시오.",
-      tooltipLabel: "성과 귀속 효과 (%)",
-      tooltipDescription: "Brinson 방식의 성과 귀속 분석은 초과 수익률을 배분, 선택, 상호작용 효과로 분해합니다. 양수(%)는 벤치마크 대비 가치를 더했음을, 음수(%)는 가치를 훼손했음을 뜻합니다.",
-      details: "상세",
-      dialogLabel: "성과 귀속 효과 방법론",
-      methodologyTitle: "성과 귀속 효과 방법론",
-      methodologySubtitle: "X축 값은 벤치마크 대비 성과에서 어떤 원천의 초과 수익률이 가치를 더하거나 훼손했는지 보여줍니다.",
-      close: "닫기",
-      calculationLabel: "계산식:",
-      largestDriverLabel: "가장 큰 관측 요인:",
     },
   },
   metricAudit: {

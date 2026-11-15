@@ -70,12 +70,6 @@ async function savePortfolioAllocation(page: Page, ticker: string, allocationPer
   await input.blur();
 }
 
-async function refreshPortfolioAnalysis(page: Page) {
-  await openPortfolioPanel(page, "attribution");
-  await page.getByRole("button", { name: "Refresh Analysis" }).click();
-  await expect(page.getByText(/Refreshing portfolio comparison and attribution\./)).toBeVisible();
-}
-
 test("deleting all holdings leaves the portfolio empty after reload", async ({ page }) => {
   await mockPortfolioPageApi(page);
   await gotoPortfolio(page);
@@ -252,7 +246,6 @@ test("stock detail modal shows explicit error states when detail and news reques
   await mockPortfolioPageApi(page, undefined, { failStockDetail: true, failNewsFeed: true });
   await clearAllHoldings(page);
   await addHolding(page, "AAPL", "Apple Inc.", "Technology");
-  await refreshPortfolioAnalysis(page);
 
   await openPortfolioPanel(page, "holdings");
   await page.getByTestId("stock-tile-AAPL").click();
@@ -304,14 +297,6 @@ test("weight editing and sync or import controls are visible and actionable", as
   await page.getByLabel("Total investment amount").fill("25000");
   await expect(page.getByText(/Saved total investment amount/)).toBeVisible();
 
-  // The date inputs moved from the header into the Attribution tab.
-  await openPortfolioPanel(page, "attribution");
-  await page.getByRole("button", { name: /^Period/ }).click();
-  await page.getByLabel("Holding Start Date").fill("2026-01-15");
-  await page.getByLabel("Return End Date").fill("2026-04-10");
-  await expect(page.getByLabel("Holding Start Date")).toHaveValue("2026-01-15");
-  await expect(page.getByLabel("Return End Date")).toHaveValue("2026-04-10");
-
   await openPortfolioPanel(page, "allocation");
   await expect(page.getByRole("button", { name: "Normalize To 100%" })).toBeVisible();
   const applyToSnapshotToggle = page.locator('input[aria-label="Apply allocation changes to snapshot"]');
@@ -324,11 +309,6 @@ test("weight editing and sync or import controls are visible and actionable", as
 
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "Portfolio", exact: true })).toBeVisible({ timeout: 60_000 });
-  await openPortfolioPanel(page, "attribution");
-  await page.getByRole("button", { name: /^Period/ }).click();
-  await expect(page.getByLabel("Holding Start Date")).toHaveValue("2026-01-15");
-  await expect(page.getByLabel("Return End Date")).toHaveValue("2026-04-10");
-
   await openPortfolioPanel(page, "allocation");
   await page.getByRole("button", { name: "Export Watchlist To JSON" }).click();
   await expect(page.getByText("Exported 1 holdings to data/exports/watchlist-export.json.")).toBeVisible();
@@ -437,7 +417,6 @@ test("portfolio table and stock modal stay aligned on latest snapshot metric val
 test("the holdings table shows implied return vs WACC, and a refused row says why", async ({ page }) => {
   await mockPortfolioPageApi(page, undefined, { nullMetricTicker: "MSFT" });
   await gotoPortfolio(page);
-  await refreshPortfolioAnalysis(page);
   await openPortfolioPanel(page, "holdings");
   // Desktop opens on cards; the comparison columns live in the table view.
   await page.getByRole("button", { name: "Table", exact: true }).click();
@@ -468,7 +447,6 @@ test("the trend delta is not taken across a snapshot that recorded no implied re
   );
   await clearAllHoldings(page);
   await addHolding(page, "AAPL", "Apple Inc.", "Technology");
-  await refreshPortfolioAnalysis(page);
   await openPortfolioPanel(page, "holdings");
   await page.getByTestId("stock-tile-AAPL").click();
   const delta = portfolioModal(page).getByTestId("implied-spread-trend-delta");
@@ -488,7 +466,6 @@ async function openAppleDetailWithHistory(page: Page, points: Array<Record<strin
   );
   await clearAllHoldings(page);
   await addHolding(page, "AAPL", "Apple Inc.", "Technology");
-  await refreshPortfolioAnalysis(page);
   await openPortfolioPanel(page, "holdings");
   await page.getByTestId("stock-tile-AAPL").click();
   return portfolioModal(page);

@@ -77,7 +77,7 @@ test("switching tabs performs no fetch", async ({ page }) => {
     if (pathname.startsWith("/api/v1/")) requested.push(pathname);
   });
 
-  for (const label of ["Attribution", "Weights", "Stocks"]) {
+  for (const label of ["Weights", "Stocks"]) {
     await page.getByRole("tab", { name: label }).click();
     await expect(page.getByRole("tab", { name: label })).toHaveAttribute("aria-selected", "true");
   }
@@ -558,7 +558,7 @@ test("the mutation message survives switching every tab and renders exactly once
 
   // The message is written from several tabs but lives in the shell, so switching
   // tabs must neither drop it nor duplicate it.
-  for (const label of ["Stocks", "Attribution", "Weights"]) {
+  for (const label of ["Stocks", "Weights"]) {
     await page.getByRole("tab", { name: label }).click();
     await expect(message).toHaveCount(1);
   }

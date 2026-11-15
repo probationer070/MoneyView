@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { mockPortfolioPageApi, type PortfolioPageMockStats } from "./helpers/portfolioPageMock";
+import { mockPortfolioPageApi } from "./helpers/portfolioPageMock";
 
 // The page sections are tabs under the header now, not an icon rail with a side panel.
 
@@ -8,12 +8,12 @@ async function gotoPortfolio(page: import("@playwright/test").Page) {
   await expect(page.getByRole("heading", { name: "Portfolio", exact: true })).toBeVisible({ timeout: 60_000 });
 }
 
-test("three page tabs in order, Stocks selected by default, and no icon rail", async ({ page }) => {
+test("two page tabs in order, Stocks selected by default, and no icon rail", async ({ page }) => {
   await mockPortfolioPageApi(page);
   await gotoPortfolio(page);
 
   const tabs = page.getByRole("tablist", { name: "Portfolio views" }).getByRole("tab");
-  await expect(tabs).toHaveText(["Stocks", "Weights", "Attribution"]);
+  await expect(tabs).toHaveText(["Stocks", "Weights"]);
   await expect(tabs.nth(0)).toHaveAttribute("aria-selected", "true");
   await expect(tabs.nth(1)).toHaveAttribute("aria-selected", "false");
   await expect(page.getByLabel("Portfolio sections")).toHaveCount(0);
@@ -31,20 +31,35 @@ test("the Weights tab shows the allocation editor", async ({ page }) => {
   await expect(page.getByLabel("Portfolio table scroll region")).toBeVisible();
 });
 
-test("the Attribution tab calculates through its own button", async ({ page }) => {
-  const stats: PortfolioPageMockStats = {
-    comparisonRequests: 0,
-    attributionRequests: 0,
-    stockDetailRequests: 0,
-    stockSnapshotHistoryRequests: 0,
-  };
-  await mockPortfolioPageApi(page, stats);
+test("only Stocks and Weights tabs exist and nothing requests attribution", async ({ page }) => {
+  const attributionRequests: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.endsWith("/portfolio/attribution")) attributionRequests.push(request.url());
+  });
+  await mockPortfolioPageApi(page);
   await gotoPortfolio(page);
 
-  await page.getByRole("tab", { name: "Attribution" }).click();
-  expect(stats.attributionRequests).toBe(0);
-  await page.getByRole("button", { name: "Refresh Analysis" }).click();
-  await expect.poll(() => stats.attributionRequests).toBeGreaterThan(0);
+  const tabs = page.getByRole("tablist", { name: "Portfolio views" }).getByRole("tab");
+  await expect(tabs).toHaveCount(2);
+  await expect(tabs).toHaveText(["Stocks", "Weights"]);
+  await expect(page.getByRole("tab", { name: "Attribution" })).toHaveCount(0);
+
+  await page.getByRole("tab", { name: "Weights" }).click();
+  await expect(page.getByRole("tab", { name: "Weights" })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("tab", { name: "Stocks" }).click();
+  await expect(page.getByTestId("stock-tile-AAPL")).toBeVisible({ timeout: 60_000 });
+  expect(attributionRequests).toEqual([]);
+});
+
+test("a stored tab value of attribution opens Stocks", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.sessionStorage.setItem("moneyview.tab.portfolio.tab", JSON.stringify("attribution"));
+  });
+  await mockPortfolioPageApi(page);
+  await gotoPortfolio(page);
+
+  await expect(page.getByRole("tab", { name: "Stocks" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("stock-tile-AAPL")).toBeVisible({ timeout: 60_000 });
 });
 
 test("Add To Portfolio from the stock detail modal lands on the Weights tab", async ({ page }) => {

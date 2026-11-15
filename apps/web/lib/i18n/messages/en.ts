@@ -19,12 +19,11 @@ export const en = {
   delta: { up: "Up", down: "Down", flat: "Unchanged" },
   portfolio: {
     title: "Portfolio",
-    tabs: { label: "Portfolio views", stocks: "Stocks", weights: "Weights", attribution: "Attribution" },
+    tabs: { label: "Portfolio views", stocks: "Stocks", weights: "Weights" },
     addStock: { title: "Add stock", open: "+ Add stock", search: "Search", placeholder: "Search ticker, name, or sector", add: "+ Add", added: "Already added", empty: "No matching stocks in the company registry." },
     news: { never: "Refresh news", updated: "News updated {minutes} min ago", justNow: "News updated just now", summary: { nothing: "Nothing to refresh", refreshed: "{count} refreshed", current: "{count} already current", failed: "{count} failed ({tickers})", notRecognised: "{count} not recognised ({tickers})", qualified: "{summary} · for the stocks visible when you pressed Refresh", failedFallback: "Refresh failed" } },
     subtitle: "{count} stocks · weights total {weight}",
     view: { label: "View", cards: "Cards", table: "Table", follow: "Follow" },
-    period: { trigger: "Period {start} – {end}", defaultStart: "default", latest: "latest", dialog: "Period and benchmark", startLabel: "Holding Start Date", startHelp: "Sets the starting point for return, attribution, and beta calculations. Use the date the stock was added or the position was first held; this prevents multi-year winners from showing inflated returns when the actual holding period is shorter.", endLabel: "Return End Date", endHelp: "Sets the ending date for return, attribution, and beta calculations. Leave blank to use the latest available cached market date." },
     grid: {
       filter: "Grid filter",
       search: "Search stocks",
@@ -50,31 +49,7 @@ export const en = {
       followTitle: "Follow this stock",
       followedTitle: "Followed — click to remove",
     },
-    analysis: {
-      refresh: "Refresh Analysis",
-      idleTitle: "Attribution Idle",
-      idleMessage: "Attribution stays idle on first load. Click Refresh Analysis when you want current portfolio attribution.",
-      addHoldingsFirst: "Add holdings before refreshing portfolio analysis.",
-      refreshing: "Refreshing portfolio comparison and attribution.",
-      refreshingPaused: "Refreshing portfolio comparison. Attribution stays paused until saved weights are 100% or below.",
-    },
-    benchmark: {
-      label: "Benchmark",
-      help: "Manual benchmark ticker input always wins. Presets are just fast selectors for common baselines. Whatever benchmark is active when you save a snapshot is stored with that snapshot for historical consistency.",
-      presetLabel: "Benchmark preset",
-      presetHelp: "Use presets for the common S&P 500 or Korea-market baselines. Selecting Manual ticker means the current benchmark symbol does not match one of the preset shortcuts.",
-      manualOption: "Manual ticker",
-      tickerAria: "Portfolio benchmark ticker",
-      presetAria: "Portfolio benchmark preset",
-    },
-    skeleton: { allocation: "Loading attribution allocation", effects: "Loading attribution effects" },
     status: {
-      pendingTitle: "Attribution Pending Portfolio",
-      pendingMessage: "Attribution charts will appear once the watchlist has at least one holding.",
-      overflowTitle: "Allocation Weights Exceed 100%",
-      overflowMessage: "Saved watchlist allocations currently sum to {weight}. Reduce total assigned weight to 100% or below before attribution can run.",
-      engineTitle: "Attribution Engine Unavailable",
-      engineMessage: "Attribution request failed. Check API health or input constraints and retry.",
     },
     kpi: { trackedNames: "Tracked Names" },
     detailLoading: "Loading stock detail",
@@ -112,7 +87,7 @@ export const en = {
       },
       layout: {
         title: "Where things are",
-        main: "The page itself holds the stock tiles. The icon bar on the right opens four panels: a summary of the most recent snapshot, attribution, the allocation workspace and the holdings table. The last icon refreshes news for the stocks on screen.",
+        main: "The page itself holds the stock tiles. The icon bar on the right opens three panels: a summary of the most recent snapshot, the allocation workspace and the holdings table. The last icon refreshes news for the stocks on screen.",
         panel: "A panel slides over the tiles. Press Escape or the close button to leave it.",
       },
       tiles: {
@@ -122,17 +97,6 @@ export const en = {
         colour: "Red with ▲ is a rise and blue with ▼ is a fall, following Korean market convention.",
         news: "The box under the line lists up to three recent headlines with their age. Without headlines it says whether news was never checked, is not loaded yet, or none was found at the last check.",
         follow: "The + or ✓ button in the corner moves a stock in or out of the followed group. The filter above the tiles switches between Followed, Not followed and All, and the count line shows how many tiles are on screen, how many exist and how many are followed.",
-      },
-      window: {
-        title: "Return dates",
-        body: "Holding Start Date and Return End Date set the window for return, attribution and beta. An empty start uses the default five-year range. An empty end uses the latest market date in the cache. Set the start to the date you actually held the stock, or a long-held winner will look better than your own result.",
-      },
-      attribution: {
-        title: "Attribution panel",
-        kpi: "Portfolio Return is each holding's return times its weight, added up. Benchmark Return is the same for the benchmark. Active Return is the first minus the second. Beta measures how strongly the portfolio moves with the benchmark: about 1 is market-like and higher is more sensitive.",
-        weights: "The weights are your saved allocations. If no weight is above zero, an equal-weight basket is used instead. If the saved weights add up to more than 100%, attribution pauses until you lower them.",
-        charts: "The donut shows allocation by sector. The waterfall splits active return into allocation, selection and interaction effects by sector (Brinson-Fachler).",
-        idle: "Attribution waits on first load. Press Refresh Analysis in the snapshot panel to calculate it.",
       },
       snapshot: {
         title: "Snapshot panel",
@@ -165,7 +129,6 @@ export const en = {
       json: { exportAction: "Export Watchlist To JSON", exporting: "Exporting...", importAction: "Import JSON Into DB", importing: "Importing...", armAria: "Arm destructive JSON import", armLabel: "I understand Import JSON replaces the DB watchlist from file and can overwrite saved weights.", help: "Export writes the current DB-backed watchlist, including weights, into data/exports/watchlist-export.json (git-ignored, personal). Import replaces the watchlist from the committed starter seed and is intentionally destructive.", syncSource: "Last sync/import source:", syncTime: "Last sync/import time:", jsonPath: "JSON path:", noneRecorded: "None recorded", loading: "Loading..." },
     },
     allocation: { title: "Portfolio Table", help: "Drag the slider for quick weight changes or double-click the Allocation value for exact manual input. Allocation and investment-amount changes save automatically, and watchlist removal stays in the holdings area instead of this table.", totalInvestment: "Total Investment", totalInvestmentAria: "Total investment amount", applyToSnapshot: "Apply To Snapshot", applyAria: "Apply allocation changes to snapshot", normalize: "Normalize To 100%", draftTotal: "Draft total", projectedNetValue: "Projected net value", feeReserve: "Transaction fee reserve", autoSave: "Auto-save status", saving: "Saving...", synced: "Synced", overflow: "Warning: draft allocation totals currently sum to {total}. You can keep editing, but attribution will stay paused until saved weights are 100.0% or below.", noteFinalProfit: "`Final Profit` uses the current DCF value vs price (a one-off gap, not a rate) for each stock and subtracts a `0.2%` transaction fee from the projected exit value. `Apply To Snapshot` keeps auto-saved allocation changes tied to today's saved comparison snapshot only when you opt in.", tableScrollAria: "Portfolio table scroll region", sliderAria: "{ticker} allocation slider", empty: "Add a stock from the search panel to start building the portfolio table." },
-    attributionSummary: { kpi: { portfolioReturn: "Portfolio Return", benchmarkReturn: "Benchmark Return", activeReturn: "Active Return", beta: "Beta" }, benchmarkCriteria: "Benchmark Selection Criteria", weightSource: "Weight Source", proxyMethod: "Proxy Method", directBenchmark: "Direct benchmark or default provider data", sectorAllocation: "Sector Allocation", attributionEffects: "Attribution Effects (%)" },
     detail: {
       quickReview: { title: "Quick portfolio review", body: "Stay in the portfolio workflow here, or open the canonical detail route for full standalone ticker analysis.", viewFull: "View Full Detail" },
       sector: { label: "Sector", aria: "Stock sector", save: "Save Sector", saving: "Saving sector...", upToDate: "Sector is already up to date.", saved: "Saved sector for {ticker}.", failed: "Failed to save sector." },
@@ -2563,47 +2526,6 @@ export const en = {
       off: "Off",
       unknown: "Unknown",
       empty: "No warning indicator has been evaluated yet.",
-    },
-  },
-  attribution: {
-    waterfall: {
-      effects: {
-        allocation: {
-          name: "Allocation",
-          represents: "Whether the portfolio was overweight or underweight sectors versus the benchmark.",
-          calculation: "Allocation_i = (portfolio weight_i - benchmark weight_i) x (benchmark sector return_i - total benchmark return); total allocation is the sum across sectors.",
-        },
-        selection: {
-          name: "Selection",
-          represents: "Whether selected holdings outperformed or underperformed their matched benchmark or sector return.",
-          calculation: "Selection_i = benchmark weight_i x (portfolio sector return_i - benchmark sector return_i); total selection is the sum across sectors.",
-        },
-        interaction: {
-          name: "Interaction",
-          represents: "The combined effect of active sector weights and active stock selection happening together.",
-          calculation: "Interaction_i = (portfolio weight_i - benchmark weight_i) x (portfolio sector return_i - benchmark sector return_i); total interaction is the sum across sectors.",
-        },
-        activeReturn: {
-          name: "Active Return",
-          represents: "The total excess return of the portfolio versus the benchmark.",
-          calculation: "Active Return = Portfolio Return - Benchmark Return = Allocation + Selection + Interaction.",
-        },
-      },
-      driver: {
-        none: "No single sector materially dominated this effect.",
-        top: "Largest sector driver: {sector} contributed {value}.",
-      },
-      emptyTitle: "No attribution effects available",
-      emptyDescription: "Refresh attribution results to compare allocation, selection, interaction, and active return.",
-      tooltipLabel: "Attribution Effects (%)",
-      tooltipDescription: "Brinson-style attribution decomposes active return into allocation, selection, and interaction effects. Positive percentages add value versus the benchmark; negative percentages detract.",
-      details: "Details",
-      dialogLabel: "Attribution effects methodology",
-      methodologyTitle: "Attribution Effects Methodology",
-      methodologySubtitle: "X-axis values explain which source of active return added or detracted from benchmark-relative performance.",
-      close: "Close",
-      calculationLabel: "Calculation:",
-      largestDriverLabel: "Largest observed driver:",
     },
   },
   metricAudit: {

@@ -20,7 +20,6 @@ function corporateStats(): CorporatePageMockStats {
 function portfolioStats(): PortfolioPageMockStats {
   return {
     comparisonRequests: 0,
-    attributionRequests: 0,
     stockDetailRequests: 0,
     stockSnapshotHistoryRequests: 0,
   };
@@ -74,15 +73,6 @@ test("portfolio analysis and holdings render state survives view and viewport ch
   await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("heading", { name: "Portfolio", exact: true })).toBeVisible({ timeout: 60_000 });
-  await openPortfolioPanel(page, "attribution");
-  await page.getByRole("button", { name: "Refresh Analysis" }).click();
-  await expect.poll(() => stats.comparisonRequests).toBe(2);
-  await expect.poll(() => stats.attributionRequests).toBe(1);
-
-  await expect(page.getByText("Portfolio Return")).toBeVisible();
-  await expectChartPanelRendered(page, "Sector Allocation");
-  await expectChartPanelRendered(page, "Attribution Effects (%)");
-
   await openPortfolioPanel(page, "allocation");
   await expect(page.getByLabel("Portfolio table scroll region")).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Allocation", exact: true })).toBeVisible();

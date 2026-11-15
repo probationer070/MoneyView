@@ -12,7 +12,6 @@ type PortfolioStock = PortfolioStockFixture;
 
 export type PortfolioPageMockStats = {
   comparisonRequests: number;
-  attributionRequests: number;
   stockDetailRequests: number;
   stockSnapshotHistoryRequests: number;
 };
@@ -89,75 +88,6 @@ const ACQUIRE_OUTCOME_BY_TICKER: Record<string, { status: string; articles: numb
   MSFT: { status: "fresh", articles: 0, detail: null },
   GOOGL: { status: "failed", articles: 0, detail: "provider timeout" },
 };
-
-function buildAttribution(weights: number[], tickers: string[]) {
-  const normalizedWeights = tickers.map((_, index) => weights[index] ?? 0);
-  const portfolioReturn = normalizedWeights.reduce((sum, weight, index) => sum + weight * (0.08 + index * 0.02), 0);
-  const benchmarkReturn = 0.07;
-  const activeReturn = portfolioReturn - benchmarkReturn;
-  return {
-    totals: {
-      portfolio_return: portfolioReturn,
-      benchmark_return: benchmarkReturn,
-    },
-    active_return: activeReturn,
-    effects: {
-      allocation: activeReturn * 0.4,
-      selection: activeReturn * 0.35,
-      interaction: activeReturn * 0.25,
-    },
-    sector_breakdowns: [
-      {
-        sector: "Technology",
-        portfolio_weight: 1.0,
-        benchmark_weight: 1.0,
-        portfolio_return: portfolioReturn,
-        benchmark_return: benchmarkReturn,
-        allocation_effect: activeReturn * 0.4,
-        selection_effect: activeReturn * 0.35,
-        interaction_effect: activeReturn * 0.25,
-        active_contribution: activeReturn,
-      },
-    ],
-    risk_metrics: {
-      beta: 1.1,
-      beta_rolling_window: 252,
-      var_95_1d: -0.021,
-      es_95_1d: -0.032,
-      var_method: "historical",
-      es_method: "historical",
-    },
-    metadata: {
-      method: "brinson_fachler_arithmetic",
-      benchmark: "^GSPC",
-      benchmark_weights_source: "provider_derived",
-      period: "5y",
-      generated_at: nowIso(),
-      portfolio_hash: "e2e-portfolio",
-      cache_key: "e2e-cache",
-      cache_hit: false,
-      data_contract: {
-        return_frequency: "daily",
-        rebalancing_assumption: "bop",
-        timezone_cutoff: "16:00:00",
-        timezone: "UTC",
-        currency: "USD",
-        fx_handling: "none_usd_only",
-        corporate_actions: "split_and_dividend_adjusted_total_return",
-        benchmark_source: "e2e-mock",
-        sector_taxonomy: "watchlist_sector_gics_like",
-        missing_data_fallback: "mock",
-      },
-      data_quality: {
-        synthetic_data_used: false,
-        synthetic_tickers: [],
-        benchmark_proxy_used: false,
-        benchmark_proxy_method: null,
-        limitations: [],
-      },
-    },
-  };
-}
 
 export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMockStats, options?: PortfolioPageMockOptions) {
   let watchlist: PortfolioStock[] = cloneFixture(options?.watchlist ?? portfolioPartialWeightsFixture);
@@ -468,12 +398,6 @@ export async function mockPortfolioPageApi(page: Page, stats?: PortfolioPageMock
         normalized,
       ];
       return json(route, normalized);
-    }
-
-    if (pathname === `${API_PREFIX}/portfolio/attribution` && method === "POST") {
-      if (stats) stats.attributionRequests += 1;
-      const payload = JSON.parse(route.request().postData() ?? "{}");
-      return json(route, { status: "ok", data: buildAttribution(payload.weights ?? [], payload.tickers ?? []) });
     }
 
     if (pathname === `${API_PREFIX}/corporate/comparison` && method === "GET") {

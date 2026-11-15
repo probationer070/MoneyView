@@ -1,13 +1,12 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
 /**
- * The portfolio page is a set of page tabs (Stocks / Weights / Attribution). A spec that
- * wants the allocation workspace or the attribution charts opens its tab first. Panel id
+ * The portfolio page is a set of page tabs (Stocks / Weights). A spec that
+ * wants the allocation workspace opens its tab first. Panel id
  * on the left, the tab's accessible name on the right.
  */
 const TABS = {
   allocation: "Weights",
-  attribution: "Attribution",
   holdings: "Stocks",
 } as const;
 

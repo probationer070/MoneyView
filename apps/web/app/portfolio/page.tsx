@@ -12,29 +12,18 @@ import { useDevMonitorPageLoad } from "@/hooks/useDevMonitorPageLoad";
 import { DeltaBadge } from "@/components/ui/DeltaBadge";
 import { Sparkline } from "@/components/ui/Sparkline";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
-import {
-  AttributionResult,
-  RawOHLCV,
-  toAllocationDonutData,
-  toAttributionWaterfallData,
-} from "@/lib/transformers";
+import { RawOHLCV } from "@/lib/transformers";
 import { ExportButton } from "@/components/ui/ExportButton";
-import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import {
-  benchmarkPresetIdForTicker,
   DEFAULT_PORTFOLIO_BENCHMARK_TICKER,
-  PORTFOLIO_BENCHMARK_PRESETS,
 } from "@/lib/benchmarkPresets";
 import { useDebounce } from "@/hooks/useDebounce";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { SkeletonCard } from "@/components/ui/LoadingState";
-import { PortfolioAttributionSummary } from "./components/PortfolioAttributionSummary";
 import { PortfolioAllocationEditor } from "./components/PortfolioAllocationEditor";
 import { AddStockModal } from "./components/AddStockModal";
 import { PortfolioCommandCenter } from "./components/PortfolioCommandCenter";
 import { PortfolioGuide } from "./components/PortfolioGuide";
-import { PeriodControl } from "./components/PeriodControl";
 import { PortfolioShell } from "./components/PortfolioShell";
 import { StockViewToggle, type StocksView } from "./components/StockViewToggle";
 import { resolveGroupFilter, selectVisibleStocks, StockTileGrid, type GridFilter } from "./components/StockTileGrid";
@@ -236,9 +225,7 @@ export interface StockDetail {
   news: NewsArticle[];
 }
 
-const PORTFOLIO_DATE_FILTERS_STORAGE_KEY = "moneyview.portfolio.dateFilters.v1";
 const PORTFOLIO_COMPARISON_CACHE_KEY = "moneyview.portfolio.comparison-cache.v1";
-const PORTFOLIO_ATTRIBUTION_CACHE_KEY = "moneyview.portfolio.attribution-cache.v1";
 const DEFAULT_TOTAL_INVESTMENT_AMOUNT = 10_000;
 const DEFAULT_TRANSACTION_FEE_RATE = 0.002;
 
@@ -254,14 +241,6 @@ type PortfolioComparisonRequestSnapshot = {
   benchmarkTicker: string;
   customTickersInput: string;
   holdingsSignature: string;
-};
-
-type AttributionRequestSnapshot = {
-  tickers: string[];
-  weights: number[];
-  benchmarkTicker: string;
-  holdingStartDate: string;
-  attributionAsOfDate: string;
 };
 
 function readSessionCache<T>(key: string): T | null {
@@ -289,45 +268,6 @@ function writeSessionCache<T>(key: string, value: T) {
   }
 }
 
-function readStoredPortfolioDateFilters() {
-  if (typeof window === "undefined") {
-    return {
-      holdingStartDate: "",
-      attributionAsOfDate: "",
-    };
-  }
-
-  try {
-    const rawValue = window.localStorage.getItem(PORTFOLIO_DATE_FILTERS_STORAGE_KEY);
-    if (!rawValue) {
-      return {
-        holdingStartDate: "",
-        attributionAsOfDate: "",
-      };
-    }
-
-    const parsed = JSON.parse(rawValue) as { holdingStartDate?: string; attributionAsOfDate?: string };
-    const holdingStartDate = parsed.holdingStartDate ?? "";
-    const attributionAsOfDate = parsed.attributionAsOfDate ?? "";
-    return {
-      holdingStartDate,
-      attributionAsOfDate: holdingStartDate && attributionAsOfDate && holdingStartDate > attributionAsOfDate
-        ? ""
-        : attributionAsOfDate,
-    };
-  } catch {
-    try {
-      window.localStorage.removeItem(PORTFOLIO_DATE_FILTERS_STORAGE_KEY);
-    } catch {
-      // Blocked storage: there is nothing to clear.
-    }
-    return {
-      holdingStartDate: "",
-      attributionAsOfDate: "",
-    };
-  }
-}
-
 const EMPTY_WATCHLIST: PortfolioStock[] = [];
 const EMPTY_THEMES: WatchlistTheme[] = [];
 /**
@@ -350,21 +290,7 @@ export const MOVING_AVERAGE_COLORS: Record<(typeof MOVING_AVERAGE_WINDOWS)[numbe
   120: tokens.chart["4"],
 };
 
-// Loading placeholders keep the attribution dashboard stable while API requests resolve.
-function KpiSkeletonCard() {
-  return <SkeletonCard className="h-[88px]" />;
-}
-
-function ChartSkeleton({ title }: { title: string }) {
-  return (
-    <div>
-      <span className="sr-only">{title}</span>
-      <SkeletonCard className="h-[320px]" />
-    </div>
-  );
-}
-
-// Shared empty/error state panel for watchlist and attribution engine failures.
+// Shared empty/error state panel for watchlist engine failures.
 export function StatusPanel({ title, message, tone = "neutral" }: { title: string; message: string; tone?: "neutral" | "warning" }) {
   if (tone === "warning") return <ErrorState title={title} message={message} />;
   return <EmptyState title={title} description={message} />;
@@ -664,44 +590,6 @@ function isPortfolioComparisonSnapshotStale(
   );
 }
 
-function isPortfolioAttributionSnapshotStale(
-  requested: AttributionRequestSnapshot | null,
-  current: AttributionRequestSnapshot,
-) {
-  return Boolean(
-    requested
-    && (
-      requested.benchmarkTicker !== current.benchmarkTicker
-      || requested.holdingStartDate !== current.holdingStartDate
-      || requested.attributionAsOfDate !== current.attributionAsOfDate
-      || requested.tickers.join(",") !== current.tickers.join(",")
-      || requested.weights.join(",") !== current.weights.join(",")
-    ),
-  );
-}
-
-function portfolioAttributionViewState({
-  attributionData,
-  attributionIsLoading,
-  attributionIsError,
-  hasHoldings,
-  canRunAttribution,
-}: {
-  attributionData: AttributionResult | null | undefined;
-  attributionIsLoading: boolean;
-  attributionIsError: boolean;
-  hasHoldings: boolean;
-  canRunAttribution: boolean;
-}) {
-  return {
-    showLoading: attributionIsLoading && hasHoldings && !attributionData,
-    showResults: hasHoldings && !attributionIsError && Boolean(attributionData),
-    showNoHoldings: !attributionIsLoading && !hasHoldings,
-    showIdle: !attributionData && canRunAttribution && !attributionIsLoading && !attributionIsError,
-    showError: !attributionIsLoading && attributionIsError && hasHoldings && !attributionData,
-  };
-}
-
 function sectorLabel(value: string) {
   return value.trim() || "Unclassified";
 }
@@ -740,10 +628,7 @@ export default function PortfolioPage() {
   useDevMonitorPageLoad({ component: "portfolio" });
   // Page state tracks the holdings presentation mode and the currently opened detail modal.
   const queryClient = useQueryClient();
-  const initialDateFilters = readStoredPortfolioDateFilters();
   const [selectedStockContext, setSelectedStockContext] = useState<SelectedStockContext | null>(null);
-  const [holdingStartDate, setHoldingStartDate] = useState(initialDateFilters.holdingStartDate);
-  const [attributionAsOfDate, setAttributionAsOfDate] = useState(initialDateFilters.attributionAsOfDate);
   const [newTicker, setNewTicker] = useState("");
   const [newName, setNewName] = useState("");
   const [newSector, setNewSector] = useState("");
@@ -761,10 +646,8 @@ export default function PortfolioPage() {
   const [mutationMessage, setMutationMessage] = useState<string | null>(null);
   const [portfolioComparisonMode, setPortfolioComparisonMode] = useState<"snapshot" | "live">("snapshot");
   const [portfolioComparisonUniverse] = useState<PortfolioComparisonUniverse>("portfolio_plus_benchmark");
-  const [portfolioComparisonBenchmarkTicker, setPortfolioComparisonBenchmarkTicker] = useState(DEFAULT_PORTFOLIO_BENCHMARK_TICKER);
   const [portfolioComparisonCustomTickersInput] = useState("NVDA, TSLA");
   const [portfolioComparisonMessage, setPortfolioComparisonMessage] = useState<string | null>(null);
-  const [portfolioAnalysisMessage, setPortfolioAnalysisMessage] = useState<string | null>(null);
   const [applyAllocationToSnapshot, setApplyAllocationToSnapshot] = useState(false);
   // "custom" is the curated group seeded from stock_targets.json. It replaces the old
   // "held" filter, which meant weight > 0 and therefore matched nothing at all while every
@@ -777,20 +660,13 @@ export default function PortfolioPage() {
   );
   const [gridSearch, setGridSearch] = useTabState(tabStateKey("portfolio", "gridSearch"), "");
   const [refreshSummary, setRefreshSummary] = useState<string | null>(null);
-  const [portfolioComparisonRequestedSnapshot, setPortfolioComparisonRequestedSnapshot] = useState<PortfolioComparisonRequestSnapshot | null>(
+  const [portfolioComparisonRequestedSnapshot] = useState<PortfolioComparisonRequestSnapshot | null>(
     () => readSessionCache<CachedCalculation<PortfolioComparisonRequestSnapshot, CorporateComparisonResponse>>(PORTFOLIO_COMPARISON_CACHE_KEY)?.snapshot ?? null,
   );
-  const [portfolioAttributionRequestedSnapshot, setPortfolioAttributionRequestedSnapshot] = useState<AttributionRequestSnapshot | null>(
-    () => readSessionCache<CachedCalculation<AttributionRequestSnapshot, AttributionResult>>(PORTFOLIO_ATTRIBUTION_CACHE_KEY)?.snapshot ?? null,
-  );
-  const [portfolioAnalysisRefreshToken, setPortfolioAnalysisRefreshToken] = useState<string | null>(null);
   const [savingAllocationTickers, setSavingAllocationTickers] = useState<string[]>([]);
   const [savingTotalInvestment, setSavingTotalInvestment] = useState(false);
   const [cachedPortfolioComparisonCalculation] = useState<CachedCalculation<PortfolioComparisonRequestSnapshot, CorporateComparisonResponse> | null>(
     () => readSessionCache<CachedCalculation<PortfolioComparisonRequestSnapshot, CorporateComparisonResponse>>(PORTFOLIO_COMPARISON_CACHE_KEY),
-  );
-  const [cachedPortfolioAttributionCalculation] = useState<CachedCalculation<AttributionRequestSnapshot, AttributionResult> | null>(
-    () => readSessionCache<CachedCalculation<AttributionRequestSnapshot, AttributionResult>>(PORTFOLIO_ATTRIBUTION_CACHE_KEY),
   );
   const allocationAutoSaveInFlightRef = useRef(false);
   const totalInvestmentAutoSaveInFlightRef = useRef(false);
@@ -800,7 +676,7 @@ export default function PortfolioPage() {
   // can switch tabs programmatically, not just on a click. Restored per session like the grid filter.
   const [stocksView, setStocksView] = useTabState<StocksView>(tabStateKey("portfolio", "stocksView"), "cards");
   const [storedTab, setActiveTab] = useTabState<string>(tabStateKey("portfolio", "tab"), "stocks");
-  const activeTab = ["stocks", "weights", "attribution"].includes(storedTab) ? storedTab : "stocks";
+  const activeTab = ["stocks", "weights"].includes(storedTab) ? storedTab : "stocks";
   // A pending scroll/focus request against the allocation section. Its content is not rendered
   // while the Weights tab is inactive, so allocationSectionRef and weightInputRefs are null until
   // the tab has mounted -- a requestAnimationFrame issued in the same tick as the tab switch would still find
@@ -843,28 +719,14 @@ export default function PortfolioPage() {
     return () => cancelAnimationFrame(frame);
   }, [allocationFocusRequest]);
 
-  const normalizedBenchmarkTicker = portfolioComparisonBenchmarkTicker.trim().toUpperCase() || DEFAULT_PORTFOLIO_BENCHMARK_TICKER;
+  const normalizedBenchmarkTicker = DEFAULT_PORTFOLIO_BENCHMARK_TICKER;
   const normalizedCustomTickersInput = portfolioComparisonCustomTickersInput.toUpperCase();
   const debouncedBenchmarkTicker = useDebounce(normalizedBenchmarkTicker, 400);
   const debouncedCustomTickersInput = useDebounce(normalizedCustomTickersInput, 400);
   const debouncedWeightDraftsKey = useDebounce(JSON.stringify(weightDrafts), 450);
   const debouncedTotalInvestmentInput = useDebounce(totalInvestmentInput, 500);
 
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(
-        PORTFOLIO_DATE_FILTERS_STORAGE_KEY,
-        JSON.stringify({
-          holdingStartDate,
-          attributionAsOfDate,
-        }),
-      );
-    } catch {
-      // Browser storage is optional; the filters still apply for this visit.
-    }
-  }, [holdingStartDate, attributionAsOfDate]);
-
-  // Watchlist query is the source for holdings, attribution inputs, and detail entry points.
+  // Watchlist query is the source for holdings and detail entry points.
   const watchlistQuery = useQuery<PortfolioStock[]>({
     queryKey: ["portfolio-watchlist"],
     queryFn: () => fetchApi<PortfolioStock[]>("/portfolio/watchlist", {
@@ -1077,8 +939,6 @@ export default function PortfolioPage() {
   const openStockDetail = useCallback((stock: PortfolioStock) => {
     setSelectedStockContext({ ticker: stock.ticker, fallbackStock: stock });
   }, []);
-  const weightsOverflow = usingStoredWeights && totalStoredWeight > 1 + WEIGHT_SUM_TOLERANCE;
-  const canRunAttribution = hasHoldings && !weightsOverflow;
   const impliedCashWeight = useMemo(
     () => Math.max(0, 1 - totalStoredWeight),
     [totalStoredWeight],
@@ -1134,13 +994,6 @@ export default function PortfolioPage() {
     customTickersInput: portfolioComparisonUniverse === "custom" ? debouncedCustomTickersInput : "",
     holdingsSignature,
   }), [debouncedBenchmarkTicker, debouncedCustomTickersInput, holdingsSignature, portfolioComparisonMode, portfolioComparisonUniverse]);
-  const attributionCurrentSnapshot = useMemo<AttributionRequestSnapshot>(() => ({
-    tickers,
-    weights,
-    benchmarkTicker: debouncedBenchmarkTicker,
-    holdingStartDate,
-    attributionAsOfDate,
-  }), [attributionAsOfDate, debouncedBenchmarkTicker, holdingStartDate, tickers, weights]);
   const effectivePortfolioComparisonSnapshot = useMemo<PortfolioComparisonRequestSnapshot | null>(() => {
     if (portfolioComparisonRequestedSnapshot) return portfolioComparisonRequestedSnapshot;
     if (!hasHoldings) return null;
@@ -1148,7 +1001,7 @@ export default function PortfolioPage() {
     return comparisonCurrentSnapshot;
   }, [comparisonCurrentSnapshot, hasHoldings, portfolioComparisonMode, portfolioComparisonRequestedSnapshot]);
   const portfolioComparisonFetchTrigger = portfolioComparisonRequestedSnapshot
-    ? (portfolioAnalysisRefreshToken ?? "manual")
+    ? "manual"
     : effectivePortfolioComparisonSnapshot
       ? "auto-snapshot"
       : "idle";
@@ -1180,63 +1033,13 @@ export default function PortfolioPage() {
     staleTime: 60_000,
   });
 
-  // Attribution uses saved watchlist weights when present, otherwise falls back to equal weight.
-  const attributionQuery = useQuery<AttributionResult>({
-    queryKey: [
-      "portfolio-attribution",
-      portfolioAttributionRequestedSnapshot?.tickers.join(",") ?? "idle",
-      portfolioAttributionRequestedSnapshot?.weights.join(",") ?? "idle",
-      "5y",
-      portfolioAttributionRequestedSnapshot?.benchmarkTicker ?? "idle",
-      "USD",
-      portfolioAttributionRequestedSnapshot?.holdingStartDate ?? "",
-      portfolioAttributionRequestedSnapshot?.attributionAsOfDate ?? "",
-      portfolioAnalysisRefreshToken ?? "idle",
-    ],
-    enabled: Boolean(canRunAttribution && portfolioAttributionRequestedSnapshot && portfolioAnalysisRefreshToken),
-      queryFn: () =>
-        fetchApi<AttributionResult>("/portfolio/attribution", {
-          method: "POST",
-          body: JSON.stringify({
-            tickers: portfolioAttributionRequestedSnapshot?.tickers ?? [],
-          weights: portfolioAttributionRequestedSnapshot?.weights ?? [],
-          benchmark: portfolioAttributionRequestedSnapshot?.benchmarkTicker ?? DEFAULT_PORTFOLIO_BENCHMARK_TICKER,
-          period: "5y",
-          currency: "USD",
-          date_from: portfolioAttributionRequestedSnapshot?.holdingStartDate || null,
-          as_of_date: portfolioAttributionRequestedSnapshot?.attributionAsOfDate || null,
-            attribution_method: "brinson_fachler_arithmetic",
-            allow_synthetic_fallback: true,
-            allow_benchmark_proxy: true,
-          }),
-          monitor: {
-            operation: "frontend.query.portfolio_attribution",
-            component: "portfolio_page",
-          },
-        }),
-    placeholderData: (previous) => previous,
-  });
-
   const cachedPortfolioComparison = cachedPortfolioComparisonCalculation
     && !isPortfolioComparisonSnapshotStale(cachedPortfolioComparisonCalculation.snapshot, comparisonCurrentSnapshot)
     ? cachedPortfolioComparisonCalculation.result
     : null;
-  const cachedPortfolioAttribution = cachedPortfolioAttributionCalculation
-    && !isPortfolioAttributionSnapshotStale(cachedPortfolioAttributionCalculation.snapshot, attributionCurrentSnapshot)
-    ? cachedPortfolioAttributionCalculation.result
-    : null;
-
-  // Chart adapters convert domain attribution data into display-ready allocation/effects datasets.
   const comparisonData = portfolioComparisonQuery.data ?? cachedPortfolioComparison;
-  const attributionData = attributionQuery.data ?? cachedPortfolioAttribution;
-  const allocationData = attributionData ? toAllocationDonutData(attributionData) : [];
-  const waterfallData = attributionData ? toAttributionWaterfallData(attributionData) : [];
   const activeComparisonData = comparisonData;
   const activeSnapshotMeta = activeComparisonData?.snapshot ?? null;
-  const portfolioComparisonCalculating = normalizedBenchmarkTicker !== debouncedBenchmarkTicker
-    || (portfolioComparisonUniverse === "custom" && normalizedCustomTickersInput !== debouncedCustomTickersInput)
-    || portfolioComparisonQuery.isFetching
-    || attributionQuery.isFetching;
   const comparisonMetricsByTicker = useMemo<Record<string, PortfolioTickerMetrics>>(() => buildPortfolioTickerMetrics({
     watchlist,
     activeComparisonData: activeComparisonData ?? null,
@@ -1306,13 +1109,6 @@ export default function PortfolioPage() {
     finalProfit: 0,
   }), [allocationRows]);
 
-  const attributionView = portfolioAttributionViewState({
-    attributionData,
-    attributionIsLoading: attributionQuery.isLoading,
-    attributionIsError: attributionQuery.isError,
-    hasHoldings,
-    canRunAttribution,
-  });
   useEffect(() => {
     if (!portfolioComparisonQuery.data || !effectivePortfolioComparisonSnapshot) return;
     writeSessionCache(PORTFOLIO_COMPARISON_CACHE_KEY, {
@@ -1322,15 +1118,6 @@ export default function PortfolioPage() {
     } satisfies CachedCalculation<PortfolioComparisonRequestSnapshot, CorporateComparisonResponse>);
   }, [effectivePortfolioComparisonSnapshot, portfolioComparisonQuery.data, portfolioComparisonQuery.dataUpdatedAt]);
 
-
-  useEffect(() => {
-    if (!attributionQuery.data || !portfolioAttributionRequestedSnapshot) return;
-    writeSessionCache(PORTFOLIO_ATTRIBUTION_CACHE_KEY, {
-      snapshot: portfolioAttributionRequestedSnapshot,
-      result: attributionQuery.data,
-      lastUpdatedAt: new Date(attributionQuery.dataUpdatedAt).toISOString(),
-    } satisfies CachedCalculation<AttributionRequestSnapshot, AttributionResult>);
-  }, [attributionQuery.data, attributionQuery.dataUpdatedAt, portfolioAttributionRequestedSnapshot]);
 
   const invalidatePortfolioCompanyQueries = useCallback(async () => {
     await Promise.all([
@@ -1734,22 +1521,6 @@ export default function PortfolioPage() {
     }
   };
 
-  const handleRefreshPortfolioAnalysis = () => {
-    if (!hasHoldings) {
-      setPortfolioAnalysisMessage(t("portfolio.analysis.addHoldingsFirst"));
-      return;
-    }
-
-    setPortfolioComparisonRequestedSnapshot(comparisonCurrentSnapshot);
-    setPortfolioAttributionRequestedSnapshot(canRunAttribution ? attributionCurrentSnapshot : null);
-    setPortfolioAnalysisRefreshToken(`${Date.now()}`);
-    setPortfolioAnalysisMessage(
-      canRunAttribution
-        ? t("portfolio.analysis.refreshing")
-        : t("portfolio.analysis.refreshingPaused"),
-    );
-  };
-
   const handleFocusAllocationForStock = (stock: PortfolioStock) => {
     const watchlistStock = watchlist.find((entry) => entry.ticker === stock.ticker) ?? null;
     if (!watchlistStock) {
@@ -1771,154 +1542,8 @@ export default function PortfolioPage() {
     requestAllocationFocus(watchlistStock.ticker);
   };
 
-  // D9: the two dates and the benchmark sit behind one trigger at the right end of the tab row.
-  const periodControl = (
-    <PeriodControl start={holdingStartDate} end={attributionAsOfDate}>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <label className="flex flex-col gap-1 type-small text-[var(--ink-muted)]">
-                  <InfoTooltip
-                    label={t("portfolio.period.startLabel")}
-                    description={t("portfolio.period.startHelp")}
-                  />
-                  <input
-                    type="date"
-                    value={holdingStartDate}
-                    onChange={(event) => setHoldingStartDate(event.target.value)}
-                    max={attributionAsOfDate || new Date().toISOString().slice(0, 10)}
-                    className="rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-body text-[var(--ink)]"
-                  />
-                </label>
-                <label className="flex flex-col gap-1 type-small text-[var(--ink-muted)]">
-                  <InfoTooltip
-                    label={t("portfolio.period.endLabel")}
-                    description={t("portfolio.period.endHelp")}
-                  />
-                  <input
-                    type="date"
-                    value={attributionAsOfDate}
-                    onChange={(event) => setAttributionAsOfDate(event.target.value)}
-                    min={holdingStartDate || undefined}
-                    max={new Date().toISOString().slice(0, 10)}
-                    className="rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-body text-[var(--ink)]"
-                  />
-                </label>
-              </div>
-                <label className="flex items-center gap-2 type-small text-[var(--ink-muted)]">
-                  <InfoTooltip
-                    label={t("portfolio.benchmark.label")}
-                    description={t("portfolio.benchmark.help")}
-                  />
-                  <input
-                    aria-label={t("portfolio.benchmark.tickerAria")}
-                    value={portfolioComparisonBenchmarkTicker}
-                    onChange={(event) => {
-                      setPortfolioComparisonBenchmarkTicker(event.target.value.toUpperCase());
-                    }}
-                    className="w-24 rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-small text-[var(--ink)]"
-                  />
-                </label>
-                <label className="flex items-center gap-2 type-small text-[var(--ink-muted)]">
-                  <InfoTooltip
-                    label={t("portfolio.benchmark.presetLabel")}
-                    description={t("portfolio.benchmark.presetHelp")}
-                  />
-                  <select
-                    aria-label={t("portfolio.benchmark.presetAria")}
-                    value={benchmarkPresetIdForTicker(portfolioComparisonBenchmarkTicker)}
-                    onChange={(event) => {
-                      const selectedPreset = PORTFOLIO_BENCHMARK_PRESETS.find((preset) => preset.id === event.target.value);
-                      if (selectedPreset) {
-                        setPortfolioComparisonBenchmarkTicker(selectedPreset.ticker);
-                      }
-                    }}
-                    className="rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-small text-[var(--ink)]"
-                  >
-                    {PORTFOLIO_BENCHMARK_PRESETS.map((preset) => (
-                      <option key={preset.id} value={preset.id}>
-                        {preset.label}
-                      </option>
-                    ))}
-                    <option value="custom">{t("portfolio.benchmark.manualOption")}</option>
-                  </select>
-                </label>
-    </PeriodControl>
-  );
-
   // Panel bodies: the sections that used to stack down the page, moved verbatim into
   // the tab panels. Only the tile grid stays in the scrolling region.
-  const attributionPanelBody = (
-    <>
-      <div className="flex flex-col gap-3 px-4 pt-3">
-        <div className="flex flex-wrap items-end gap-3">
-          <button
-            type="button"
-            onClick={handleRefreshPortfolioAnalysis}
-            className="inline-flex items-center justify-center gap-2 rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 type-small text-[var(--ink)] hover:border-[var(--brand)]"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${portfolioComparisonCalculating ? "animate-spin" : ""}`} />
-            {t("portfolio.analysis.refresh")}
-          </button>
-        </div>
-        {portfolioAnalysisMessage && <span className="type-small text-[var(--ink-muted)]">{portfolioAnalysisMessage}</span>}
-      </div>
-      {/* Attribution loading state: skeleton KPI cards and chart panels while results calculate. */}
-      {attributionView.showLoading && (
-        <>
-          <section className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <KpiSkeletonCard />
-            <KpiSkeletonCard />
-            <KpiSkeletonCard />
-            <KpiSkeletonCard />
-          </section>
-          <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <ChartSkeleton title={t("portfolio.skeleton.allocation")} />
-            <ChartSkeleton title={t("portfolio.skeleton.effects")} />
-          </section>
-        </>
-      )}
-
-      {/* Attribution results: KPI summary, benchmark methodology, allocation, and effects charts. */}
-      {attributionView.showResults && attributionData && (
-        <PortfolioAttributionSummary
-          attributionData={attributionData}
-          allocationData={allocationData}
-          waterfallData={waterfallData}
-          holdingStartDate={holdingStartDate}
-          attributionAsOfDate={attributionAsOfDate}
-        />
-      )}
-      {attributionView.showNoHoldings && !watchlistQuery.isError && (
-        <StatusPanel
-          title={t("portfolio.status.pendingTitle")}
-          message={t("portfolio.status.pendingMessage")}
-        />
-      )}
-
-      {attributionView.showIdle && (
-        <StatusPanel
-          title={t("portfolio.analysis.idleTitle")}
-          message={t("portfolio.analysis.idleMessage")}
-        />
-      )}
-
-      {weightsOverflow && (
-        <StatusPanel
-          title={t("portfolio.status.overflowTitle")}
-          message={t("portfolio.status.overflowMessage", { weight: formatNumber(totalStoredWeight, "percent", { digits: 1 }) })}
-          tone="warning"
-        />
-      )}
-
-      {attributionView.showError && (
-        <StatusPanel
-          title={t("portfolio.status.engineTitle")}
-          message={t("portfolio.status.engineMessage")}
-          tone="warning"
-        />
-      )}
-    </>
-  );
-
   const allocationPanelBody = (
     <>
       <section ref={allocationSectionRef} className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
@@ -2103,13 +1728,12 @@ export default function PortfolioPage() {
         tabs={[
           { key: "stocks", label: t("portfolio.tabs.stocks") },
           { key: "weights", label: t("portfolio.tabs.weights") },
-          { key: "attribution", label: t("portfolio.tabs.attribution") },
         ]}
         tabsLabel={t("portfolio.tabs.label")}
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        tabsAside={activeTab === "stocks" ? <StockViewToggle value={stocksView} onChange={setStocksView} /> : activeTab === "attribution" ? periodControl : null}
-        panels={{ stocks: stocksPanel, weights: allocationPanelBody, attribution: attributionPanelBody }}
+        tabsAside={activeTab === "stocks" ? <StockViewToggle value={stocksView} onChange={setStocksView} /> : null}
+        panels={{ stocks: stocksPanel, weights: allocationPanelBody }}
         notices={
           <>
             <div className="px-4 pt-3"><PortfolioGuide /></div>
@@ -2133,7 +1757,7 @@ export default function PortfolioPage() {
         }
       >
         <div className="px-4 pt-4">
-          {/* Header: page identity and export. The attribution dates live in the Attribution tab. */}
+          {/* Header: page identity and export. */}
           <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="flex flex-col self-start">
               <h1 className="type-heading-5 text-[var(--ink)]">{t("portfolio.title")}</h1>
@@ -2145,7 +1769,7 @@ export default function PortfolioPage() {
               </p>
             </div>
             <div className="flex flex-col gap-3 lg:items-end">
-              <ExportButton tickers={tickers} weights={weights} benchmark={debouncedBenchmarkTicker} period="5y" currency="USD" dateFrom={holdingStartDate} asOfDate={attributionAsOfDate} />
+              <ExportButton tickers={tickers} weights={weights} benchmark={DEFAULT_PORTFOLIO_BENCHMARK_TICKER} period="5y" currency="USD" dateFrom="" asOfDate="" />
             </div>
           </header>
         </div>

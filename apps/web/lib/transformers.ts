@@ -94,30 +94,3 @@ export function sanitizeTooltip(input: string): string {
     if (!input) return "";
     return input.replace(/<\/?[^>]+(>|$)/g, ""); // Strip all standard HTML 
 }
-
-// ------------------------------------------------------------------------
-// Portfolio Attribution Adapters (domain -> chart)
-// ------------------------------------------------------------------------
-
-export function toAllocationDonutData(data: AttributionResult): Array<{ name: string; value: number }> {
-    if (!data?.sector_breakdowns?.length) return [];
-    return data.sector_breakdowns.map((row) => ({
-        name: row.sector,
-        value: Math.max(0, row.portfolio_weight),
-    }));
-}
-
-export function toAttributionWaterfallData(data: AttributionResult): Array<{ name: string; value: number; cumulative: number }> {
-    if (!data) return [];
-    const rows = [
-        { name: "Allocation", value: data.effects.allocation },
-        { name: "Selection", value: data.effects.selection },
-        { name: "Interaction", value: data.effects.interaction },
-        { name: "Active Return", value: data.active_return },
-    ];
-    let cumulative = 0;
-    return rows.map((row) => {
-        cumulative += row.value;
-        return { ...row, cumulative };
-    });
-}

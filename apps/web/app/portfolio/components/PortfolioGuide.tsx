@@ -23,13 +23,6 @@ export function PortfolioGuide() {
         <p>{t("portfolio.guide.tiles.news")}</p>
         <p>{t("portfolio.guide.tiles.follow")}</p>
       </GuideSection>
-      <GuideSection title={t("portfolio.guide.window.title")}><p>{t("portfolio.guide.window.body")}</p></GuideSection>
-      <GuideSection title={t("portfolio.guide.attribution.title")}>
-        <p>{t("portfolio.guide.attribution.kpi")}</p>
-        <p>{t("portfolio.guide.attribution.weights")}</p>
-        <p>{t("portfolio.guide.attribution.charts")}</p>
-        <p>{t("portfolio.guide.attribution.idle")}</p>
-      </GuideSection>
       <GuideSection title={t("portfolio.guide.snapshot.title")}>
         <p>{t("portfolio.guide.snapshot.source")}</p>
         <p>{t("portfolio.guide.snapshot.cards")}</p>
