@@ -11,13 +11,11 @@ ROOT = Path(__file__).resolve().parents[2]
 SCAN_DIRS = ("apps/api", "packages/core_finance")
 FORBIDDEN_NUMBERS = (0.042, 0.055)
 FORBIDDEN_NAMES = ("DEFAULT_RISK_FREE_RATE", "DEFAULT_EQUITY_RISK_PREMIUM", "KOREA_COUNTRY_RISK_PREMIUM")
-# The seed, plus entries that are not premia or belong to S2b. Delete each S2b line in S2b.
+# The seed, plus entries that are not premia.
 ALLOWED = {
     "apps/api/services/db.py": "the seed",
     "apps/api/services/valuation_seed.py": "the seed",
     "apps/api/routes/monte_carlo.py": "0.055 is one expected-return sample, not a premium",
-    "apps/api/services/corporate_dcf.py": "S2b: DCF builder defaults",
-    "apps/api/services/investment_decision.py": "S2b: decision builder defaults",
 }
 
 

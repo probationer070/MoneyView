@@ -143,3 +143,8 @@ class AssumptionsRefused(Exception):
 def capm_cost_of_equity_pct(a: Assumptions, levered_beta: float, crp_pct: float) -> float:
     """The one CAPM cost of equity, in percent: rf + beta x ERP + CRP (plan section 3, S2a)."""
     return a.risk_free_rate + levered_beta * a.equity_risk_premium + crp_pct
+
+
+def assumptions_missing_reason(exc: AssumptionsRefused) -> str:
+    """The refusal reason string of the case generators (prefix kept, as their other reasons do)."""
+    return f"assumptions_missing: {', '.join(exc.missing)} not on file; enter it under Market assumptions"

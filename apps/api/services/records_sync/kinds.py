@@ -140,8 +140,8 @@ KINDS: dict[str, Kind] = {
         generates_uid=True,
         not_null=("ticker", "decided_at", "action", "memo", "figures_source"),
         # Optional, like offering_price: an unedited decision leaves the key out, so a peer on the code
-        # before edited_at still reads it.
-        optional_columns=("edited_at",),
+        # before edited_at still reads it. Likewise `assumptions_as_of`, NULL on every older decision.
+        optional_columns=("edited_at", "assumptions_as_of"),
     ),
     KIND_USER_EVENT: Kind(
         name=KIND_USER_EVENT,

@@ -62,12 +62,12 @@ def measure(tickers_and_types):
     from apps.api.services.acquisition.store import load_price_bars
     from apps.api.services.fair_value import generate_fair_value_case_for_ticker
     from apps.api.services.industry_benchmark_store import industry_row_for_ticker
-    from apps.api.services.investment_decision import (
-        DEFAULT_EQUITY_RISK_PREMIUM, DEFAULT_RISK_FREE_RATE, _default_figures_loader,
-    )
+    from apps.api.services.investment_decision import _default_figures_loader, _resolve_now
+    from apps.api.services.market_assumptions import AssumptionsMissing
     from apps.api.services.valuation_case import load_case, run_stored_case
 
     rows = []
+    assumptions = _resolve_now()  # the copied database's market assumptions, read once for the whole run
     for ticker, kind in tickers_and_types:
         row = {"ticker": ticker, "instrument_type": kind or ""}
         rows.append(row)
@@ -125,8 +125,11 @@ def measure(tickers_and_types):
 
         # Corporate tab 5-year DCF.
         try:
+            if isinstance(assumptions, AssumptionsMissing):
+                row["dcf_status"] = "assumptions_missing"
+                continue
             figures = _default_figures_loader(
-                ticker, risk_free_rate=DEFAULT_RISK_FREE_RATE, equity_risk_premium=DEFAULT_EQUITY_RISK_PREMIUM
+                ticker, risk_free_rate=assumptions.rf_fraction, equity_risk_premium=assumptions.erp_fraction
             )
             if figures.get("dcf_refusal"):
                 row["dcf_status"] = "non_positive_fcff"

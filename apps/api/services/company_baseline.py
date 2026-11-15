@@ -35,6 +35,7 @@ from apps.api.services.corporate_statement_metrics import (
     statement_baseline,
 )
 from apps.api.services.equity_bridge import load_equity_bridge
+from apps.api.services.market_assumptions import AssumptionsRefused, assumptions_missing_reason
 from apps.api.services.industry_benchmark_store import latest_vintage, resolve_for_ticker
 from apps.api.services.valuation_case import create_case, list_cases
 
@@ -203,7 +204,10 @@ def generate_conservative_case_for_ticker(
     refusal rather than the differing case the horizon change would imply.
     """
     if riskfree_rate is None:
-        riskfree_rate = resolved_riskfree_fraction()
+        try:
+            riskfree_rate = resolved_riskfree_fraction()
+        except AssumptionsRefused as exc:
+            return None, assumptions_missing_reason(exc)
     metrics = metrics_for_ticker(ticker, bundle_loader=bundle_loader)
     bridge = load_equity_bridge(ticker, bundle_loader=bundle_loader)
 

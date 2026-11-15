@@ -127,6 +127,11 @@ class DCFWaccBreakdown(BaseModel):
     tax_rate: float
     equity_risk_premium: float
     country_risk_premium: float
+    # Where rf and ERP came from (the resolver's echo); None only for a report built without it.
+    risk_free_source: str | None = None
+    risk_free_as_of: str | None = None
+    erp_source: str | None = None
+    erp_as_of: str | None = None
 
 
 class DCFSensitivityCell(BaseModel):

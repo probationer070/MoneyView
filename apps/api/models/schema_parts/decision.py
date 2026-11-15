@@ -91,4 +91,7 @@ class DecisionRow(BaseModel):
     figures_unavailable_reason: str | None = None
     # When action or memo was last corrected (ISO-8601 UTC); None = never edited.
     edited_at: str | None = None
+    # The older of the rf and ERP as-of dates the rates above came from (ISO date); None = unknown
+    # (a row from before the resolver, or rates passed in explicitly).
+    assumptions_as_of: str | None = None
     outcome: DecisionOutcome

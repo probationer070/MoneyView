@@ -52,6 +52,10 @@ export interface DcfWaccBreakdown {
   tax_rate: number;
   equity_risk_premium: number;
   country_risk_premium: number;
+  risk_free_source?: string | null;
+  risk_free_as_of?: string | null;
+  erp_source?: string | null;
+  erp_as_of?: string | null;
 }
 
 /**

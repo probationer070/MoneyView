@@ -1747,7 +1747,13 @@ def yahoo_metric_history(
     return {
         "ticker": ticker,
         "start_year": YAHOO_STATEMENT_START_YEAR,
-        "country_risk_premium": country_risk_premium_for(bundle["info"].get("financialCurrency"), _crp_of(assumptions)),
+        # Null for a non-mature reporter when no CRP is on file: `country_risk_premium_for` would re-read the DB
+        # and could answer for a caller that was told the assumptions are missing.
+        "country_risk_premium": (
+            0.0
+            if str(bundle["info"].get("financialCurrency") or "").strip().upper() in MATURE_MARKET_REPORTING_CURRENCIES
+            else _crp_of(assumptions)
+        ),
         "growth_calculation_version": "growth_v2_stable_cagr",
         "growth_cagr": growth_payload["growth_cagr"],
         "growth_recent_average": growth_payload["growth_recent_average"],

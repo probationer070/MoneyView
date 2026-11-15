@@ -58,19 +58,25 @@ import secrets
 from datetime import datetime, timezone
 
 from apps.api.services.db import get_db
+from apps.api.services.market_assumptions import (
+    Assumptions,
+    AssumptionsMissing,
+    AssumptionsRefused,
+    resolve_assumptions,
+)
 from apps.api.services.records_sync import store as records_sync_store
 from apps.api.services.records_sync.kinds import KIND_DECISION
 from apps.api.services.watchlist_sync.store import get_or_create_pc_id
 
 ACTIONS = ("buy", "sell", "watch", "pass")
 
-# Defaults matching the assumptions the comparison table ships with. DECIMAL
-# scale (0.042 == 4.2%), matching the codebase-wide contract documented in
-# packages/core_finance/expected_return.py and used by corporate_statement_metrics.py.
-# `investment_decision` stores these rates as-is (decimal); this differs from
-# `corporate_comparison_snapshots_v3`, which stores `round(rate * 100, 2)`.
-DEFAULT_RISK_FREE_RATE = 0.042
-DEFAULT_EQUITY_RISK_PREMIUM = 0.055
+# The rates are the market-assumptions resolver's (plan 2026-11-16 S2b), as DECIMALS (0.042 == 4.2%),
+# matching the codebase-wide contract documented in packages/core_finance/expected_return.py.
+# `investment_decision` stores them as-is (decimal); this differs from `corporate_comparison_snapshots_v3`,
+# which stores `round(rate * 100, 2)`. No default lives here: a copy of the number would drift from the table.
+def _resolve_now() -> Assumptions | AssumptionsMissing:
+    with get_db() as conn:
+        return resolve_assumptions(conn, datetime.now(timezone.utc))
 
 
 def _default_figures_loader(
@@ -99,6 +105,9 @@ def _default_figures_loader(
         risk_free_rate=risk_free_rate,
         equity_risk_premium=equity_risk_premium,
     )
+    if metrics.wacc is None:
+        refusal = metrics.wacc_refusal
+        raise AssumptionsRefused(tuple(refusal.missing) if refusal else ())
     return {
         "price_at_decision": float(dcf["current_price"]),
         "dcf_value": dcf["estimated_value"],
@@ -125,8 +134,8 @@ def record_decision(
     ticker: str,
     action: str,
     memo: str,
-    risk_free_rate: float = DEFAULT_RISK_FREE_RATE,
-    equity_risk_premium: float = DEFAULT_EQUITY_RISK_PREMIUM,
+    risk_free_rate: float | None = None,
+    equity_risk_premium: float | None = None,
     figures_loader=None,
 ) -> int:
     """Persist one decision, capturing the model's figures HERE rather than
@@ -136,11 +145,32 @@ def record_decision(
     from a page opened an hour earlier, and would be stored as what the user
     believed with no way to tell the difference later. Capturing server-side
     makes the record self-certifying; `figures_source` names where it came from.
+
+    A rate left as None is the resolver's, and `assumptions_as_of` then records the older of the rf and ERP
+    as-of dates it used (NULL when either rate was passed in, and on every row from before the column).
+    Missing assumptions record the decision with the reason in place of the numbers, like any other refusal.
     """
     from apps.api.services.corporate_comparison import METRIC_SCHEMA_VERSION
 
     ticker = ticker.upper().strip()
     _check_action_and_memo(action, memo)
+
+    assumptions_as_of: str | None = None
+    assumptions_missing: str | None = None
+    if risk_free_rate is None or equity_risk_premium is None:
+        resolved = _resolve_now()
+        if isinstance(resolved, AssumptionsMissing):
+            assumptions_missing = (
+                f"figures unavailable: assumptions_missing ({', '.join(resolved.missing)}): "
+                "no risk-free rate or equity risk premium is on file"
+            )
+        else:
+            if risk_free_rate is None and equity_risk_premium is None:
+                assumptions_as_of = min(resolved.risk_free_as_of, resolved.erp_as_of)
+            if risk_free_rate is None:
+                risk_free_rate = resolved.rf_fraction
+            if equity_risk_premium is None:
+                equity_risk_premium = resolved.erp_fraction
 
     if figures_loader is not None:
         loader = figures_loader
@@ -152,7 +182,11 @@ def record_decision(
     figures: dict | None = None
     unavailable: str | None = None
     try:
+        if assumptions_missing is not None:
+            raise AssumptionsRefused(())
         figures = loader(ticker)
+    except AssumptionsRefused as exc:
+        unavailable = assumptions_missing or f"figures unavailable: assumptions_missing ({', '.join(exc.missing)})"
     except (ValueError, KeyError, TypeError) as exc:
         # The model could not value this ticker. Record the decision anyway with
         # the reason in place of the numbers -- refusing outright would drop the
@@ -211,8 +245,8 @@ def record_decision(
             """INSERT INTO investment_decision
                (ticker, decided_at, action, memo, price_at_decision, dcf_value,
                 dcf_implied_return, roic, wacc, risk_free_rate, equity_risk_premium,
-                metric_schema_version, figures_source, figures_unavailable_reason, sync_uid)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                metric_schema_version, figures_source, figures_unavailable_reason, sync_uid, assumptions_as_of)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 ticker,
                 datetime.now(timezone.utc).isoformat(),
@@ -229,6 +263,7 @@ def record_decision(
                 (figures or {}).get("source", "unavailable"),
                 unavailable,
                 sync_uid,
+                assumptions_as_of if figures else None,
             ),
         )
         records_sync_store.stamp(conn, KIND_DECISION, sync_uid, get_or_create_pc_id(conn))

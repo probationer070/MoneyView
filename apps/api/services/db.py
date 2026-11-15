@@ -948,6 +948,9 @@ def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
     if decision_columns and "edited_at" not in decision_columns:
         # Nullable: existing decisions were never edited.
         conn.execute("ALTER TABLE investment_decision ADD COLUMN edited_at TEXT")
+    if decision_columns and "assumptions_as_of" not in decision_columns:
+        # Nullable: decisions recorded before the market-assumptions resolver stay frozen as "as-of unknown".
+        conn.execute("ALTER TABLE investment_decision ADD COLUMN assumptions_as_of TEXT")
     index_columns = {row["name"] for row in conn.execute("PRAGMA table_info(indices)")}
     if "dividends" not in index_columns:
         conn.execute("ALTER TABLE indices ADD COLUMN dividends REAL DEFAULT 0.0")

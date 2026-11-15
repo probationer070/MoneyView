@@ -25,6 +25,7 @@ from apps.api.services.corporate_statement_metrics import (
     statement_baseline,
 )
 from apps.api.services.equity_bridge import load_equity_bridge
+from apps.api.services.market_assumptions import AssumptionsRefused, assumptions_missing_reason
 from apps.api.services.fair_value_case import (
     COMMODITY_INDUSTRIES,
     GROWTH_CAP,
@@ -62,7 +63,10 @@ def generate_fair_value_case_for_ticker(
     """
     ticker = ticker.upper()
     if riskfree_rate is None:
-        riskfree_rate = resolved_riskfree_fraction()
+        try:
+            riskfree_rate = resolved_riskfree_fraction()
+        except AssumptionsRefused as exc:
+            return None, False, None, assumptions_missing_reason(exc)
     industry, vintage, reason = industry_row_for_ticker(ticker, as_of=as_of)
     if industry is None:
         return None, False, None, reason

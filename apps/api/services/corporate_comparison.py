@@ -24,6 +24,7 @@ from apps.api.services.acquisition.store import save_quote_facts, save_statement
 from apps.api.services.corporate_statement_metrics import _pick_worst_quality, statement_currency_mismatch
 from apps.api.services.db import get_db
 from apps.api.services.equity_bridge import load_equity_bridge
+from apps.api.services.market_assumptions import AssumptionsRefused
 from packages.core_finance.beta import relever_beta
 from packages.core_finance.dcf import calculate_equity_value, calculate_intrinsic_value_per_share, fcff_path_is_admissible
 from packages.core_finance.expected_return import (
@@ -401,6 +402,10 @@ def _dcf_snapshot(
     currency_check: Callable[[str], str | None] = statement_currency_mismatch,
 ) -> dict[str, float | str]:
     with perf_timer(scope="calculation", operation="calculation.dcf_upside", ticker=ticker, component="corporate_comparison"):
+        if metrics.wacc is None:
+            # Market assumptions missing (plan 2026-11-16 section 2): no WACC, so nothing is valued.
+            refusal = metrics.wacc_refusal
+            raise AssumptionsRefused(tuple(refusal.missing) if refusal else ())
         current_price = price_loader(ticker)
         wacc = max(float(metrics.wacc) / 100, 0.001)
         growth_rate = float(metrics.growth) / 100

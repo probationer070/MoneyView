@@ -23,6 +23,7 @@ from pydantic import ValidationError
 
 from apps.api.models.schemas import ValuationAssumptions
 from apps.api.services.corporate_dcf import build_bulk_dcf_reports
+from tests.api.seed_assumptions import SEED_ASSUMPTIONS
 
 
 class _Report:
@@ -69,6 +70,7 @@ def _build(tickers, bad=frozenset()):
         valuation_params_builder=_params_builder_that_refuses(set(bad)),
         report_builder=lambda ticker, **_: _Report(ticker),
         risk_free_rate=0.04,
+        equity_risk_premium=SEED_ASSUMPTIONS.erp_fraction,
     )
 
 
@@ -140,6 +142,7 @@ def test_a_cash_burning_ticker_is_skipped_as_a_refusal_not_valued_or_rejected_by
         valuation_params_builder=valuation_params_from_metrics,
         report_builder=build_dcf_full_report,
         risk_free_rate=0.04,
+        equity_risk_premium=SEED_ASSUMPTIONS.erp_fraction,
     )
     assert [r.summary.ticker for r in result.reports] == ["AAPL"]
     [skip] = result.skipped

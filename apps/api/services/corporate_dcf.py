@@ -45,9 +45,7 @@ class BulkDcfResult:
     skipped: list[SkippedDcfTicker]
 from apps.api.services.corporate_statement_metrics import _pick_worst_quality
 from apps.api.services.equity_bridge import load_equity_bridge
-
-DEFAULT_EQUITY_RISK_PREMIUM = 0.055
-
+from apps.api.services.market_assumptions import Assumptions
 
 def build_dcf_summary(
     ticker: str,
@@ -56,13 +54,14 @@ def build_dcf_summary(
     current_price_loader: Callable[[str], float],
     metrics_loader: Callable[[str], CorporateMetrics],
     risk_free_rate: float,
-    equity_risk_premium: float = DEFAULT_EQUITY_RISK_PREMIUM,
+    equity_risk_premium: float,
     country_risk_premium: float | None = None,
     currency_check: Callable[[str], str | None] | None = None,
+    assumptions: Assumptions | None = None,
 ) -> tuple[DCFSummary, DCFAssumptionSummary]:
     """Compute the lightweight DCF phases used by the realtime transport."""
 
-    summary, assumptions, _ = _build_dcf_outputs(
+    summary, assumption_summary, _ = _build_dcf_outputs(
         ticker=ticker,
         params=params,
         current_price_loader=current_price_loader,
@@ -71,8 +70,9 @@ def build_dcf_summary(
         equity_risk_premium=equity_risk_premium,
         country_risk_premium=country_risk_premium,
         currency_check=currency_check,
+        assumptions=assumptions,
     )
-    return summary, assumptions
+    return summary, assumption_summary
 
 
 def build_dcf_full_report(
@@ -82,9 +82,10 @@ def build_dcf_full_report(
     current_price_loader: Callable[[str], float],
     metrics_loader: Callable[[str], CorporateMetrics],
     risk_free_rate: float,
-    equity_risk_premium: float = DEFAULT_EQUITY_RISK_PREMIUM,
+    equity_risk_premium: float,
     country_risk_premium: float | None = None,
     currency_check: Callable[[str], str | None] | None = None,
+    assumptions: Assumptions | None = None,
 ) -> DCFFullReport:
     """Compute the full DCF report reserved for explicit retrieval."""
 
@@ -97,6 +98,7 @@ def build_dcf_full_report(
         equity_risk_premium=equity_risk_premium,
         country_risk_premium=country_risk_premium,
         currency_check=currency_check,
+        assumptions=assumptions,
     )
     return full_report
 
@@ -143,9 +145,10 @@ def build_bulk_dcf_reports(
     valuation_params_builder: Callable[[CorporateMetrics], ValuationAssumptions],
     report_builder: Callable[..., DCFFullReport] = build_dcf_full_report,
     risk_free_rate: float,
-    equity_risk_premium: float = DEFAULT_EQUITY_RISK_PREMIUM,
+    equity_risk_premium: float,
     country_risk_premium: float | None = None,
     currency_check: Callable[[str], str | None] | None = None,
+    assumptions: Assumptions | None = None,
 ) -> BulkDcfResult:
     """Build full DCF reports for a deduplicated ticker list.
 
@@ -195,6 +198,12 @@ def build_bulk_dcf_reports(
             # eleventh ticker is worth less than one that names it and continues.
             skipped.append(SkippedDcfTicker(ticker=ticker, reason=f"{type(error).__name__}: {error}"))
             continue
+        if assumptions is not None and isinstance(report, DCFFullReport):
+            # The report builder is injected and takes no assumptions keyword; the echo is stamped on its result.
+            report = report.model_copy(update={"wacc_breakdown": report.wacc_breakdown.model_copy(update={
+                "risk_free_source": assumptions.risk_free_source, "risk_free_as_of": assumptions.risk_free_as_of,
+                "erp_source": assumptions.erp_source, "erp_as_of": assumptions.erp_as_of,
+            })})
         reports.append(report)
     return BulkDcfResult(reports=reports, skipped=skipped)
 
@@ -210,6 +219,7 @@ def _build_dcf_outputs(
     country_risk_premium: float | None,
     bridge_loader=load_equity_bridge,
     currency_check: Callable[[str], str | None] | None = None,
+    assumptions: Assumptions | None = None,
 ) -> tuple[DCFSummary, DCFAssumptionSummary, DCFFullReport]:
     ticker = ticker.upper()
     # Statements and price in different currencies cannot make a value per share (ERROR-LOG
@@ -425,10 +435,14 @@ def _build_dcf_outputs(
         projection_rows=projection_rows,
         wacc_breakdown=DCFWaccBreakdown(
             risk_free_rate=round(float(risk_free_rate), 6),
+            risk_free_source=assumptions.risk_free_source if assumptions is not None else None,
+            risk_free_as_of=assumptions.risk_free_as_of if assumptions is not None else None,
             unlevered_beta=round(float(params.unlevered_beta or (metrics.unlevered_beta if metrics else 0.0)), 6),
             debt_ratio=round(float(params.debt_ratio or (metrics.debt_ratio if metrics else 0.0)), 6),
             tax_rate=round(float(params.tax_rate), 6),
             equity_risk_premium=round(float(equity_risk_premium), 6),
+            erp_source=assumptions.erp_source if assumptions is not None else None,
+            erp_as_of=assumptions.erp_as_of if assumptions is not None else None,
             # A fraction. None means the ticker's own premium (metrics.crp is a percent): the
             # routes used to pass the fixed Korea 0.8 here, shown as 80% (plan 2026-11-02 §6.5).
             country_risk_premium=round(

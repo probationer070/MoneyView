@@ -17,6 +17,7 @@ from apps.api.services.corporate_dcf import _build_dcf_outputs, build_bulk_dcf_r
 from apps.api.services.corporate_statement_metrics import statement_currency_mismatch
 from apps.api.services.equity_bridge import EquityBridge
 from packages.core_finance.refusals import EngineRefusal
+from tests.api.seed_assumptions import SEED_ASSUMPTIONS
 
 REASON = "TSM reports in TWD and trades in USD; a value per share would mix the two"
 
@@ -92,6 +93,7 @@ def test_the_bulk_report_skips_a_mixed_currency_ticker_and_values_the_rest():
         valuation_params_builder=lambda m: _params(),
         report_builder=lambda ticker, **_: type("R", (), {"ticker": ticker})(),
         risk_free_rate=0.042,
+        equity_risk_premium=SEED_ASSUMPTIONS.erp_fraction,
         currency_check=lambda t: REASON if t == "TSM" else None,
     )
     assert [r.ticker for r in result.reports] == ["AAPL"]

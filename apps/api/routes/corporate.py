@@ -344,6 +344,7 @@ def dynamic_dcf_model(ticker: str, params: ValuationAssumptions):
             metrics_loader=_metrics_for_ticker,
             risk_free_rate=assumptions.rf_fraction,
             equity_risk_premium=assumptions.erp_fraction,
+            assumptions=assumptions,
             currency_check=statement_currency_mismatch,
         )
     except EngineRefusal as exc:
@@ -367,6 +368,7 @@ def get_dcf_full_report(ticker: str, params: ValuationAssumptions):
             metrics_loader=_metrics_for_ticker,
             risk_free_rate=assumptions.rf_fraction,
             equity_risk_premium=assumptions.erp_fraction,
+            assumptions=assumptions,
             currency_check=statement_currency_mismatch,
         )
     except EngineRefusal as exc:
@@ -402,6 +404,7 @@ def get_bulk_dcf_reports(request: CorporateDcfBatchRequest):
         report_builder=build_dcf_full_report,
         risk_free_rate=assumptions.rf_fraction,
         equity_risk_premium=assumptions.erp_fraction,
+        assumptions=assumptions,
         currency_check=statement_currency_mismatch,
     )
     # `skipped` travels with the reports rather than being logged and dropped. A batch
@@ -429,6 +432,7 @@ async def stream_dcf_summary(request: Request, ticker: str, params: ValuationAss
             metrics_loader=_metrics_for_ticker,
             risk_free_rate=assumptions.rf_fraction,
             equity_risk_premium=assumptions.erp_fraction,
+            assumptions=assumptions,
             currency_check=statement_currency_mismatch,
         )
     except EngineRefusal as exc:
