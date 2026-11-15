@@ -3,6 +3,7 @@
 import { formatNumber } from "@/lib/format";
 import dynamic from "next/dynamic";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { useT } from "@/lib/i18n/locale";
 import type { AttributionResult, toAllocationDonutData, toAttributionWaterfallData } from "@/lib/transformers";
 
 type AllocationDonutData = ReturnType<typeof toAllocationDonutData>;
@@ -25,10 +26,20 @@ function ChartLoadingPanel({ title }: { title: string }) {
   );
 }
 
+function SectorAllocationLoading() {
+  const t = useT();
+  return <ChartLoadingPanel title={t("portfolio.attributionSummary.sectorAllocation")} />;
+}
+
+function AttributionEffectsLoading() {
+  const t = useT();
+  return <ChartLoadingPanel title={t("portfolio.attributionSummary.attributionEffects")} />;
+}
+
 const AllocationDonut = dynamic(
   () => import("@/components/charts/AllocationDonut").then((mod) => mod.AllocationDonut),
   {
-    loading: () => <ChartLoadingPanel title="Sector Allocation" />,
+    loading: () => <SectorAllocationLoading />,
     ssr: false,
   },
 );
@@ -36,7 +47,7 @@ const AllocationDonut = dynamic(
 const AttributionWaterfall = dynamic(
   () => import("@/components/charts/AttributionWaterfall").then((mod) => mod.AttributionWaterfall),
   {
-    loading: () => <ChartLoadingPanel title="Attribution Effects (%)" />,
+    loading: () => <AttributionEffectsLoading />,
     ssr: false,
   },
 );
@@ -47,8 +58,8 @@ function portfolioStatus(label: string, value: number) {
   return value > 0 ? `${label} is positive.` : `${label} is negative.`;
 }
 
-function benchmarkMethodLabel(method?: string | null) {
-  if (!method) return "Direct benchmark or default provider data";
+function benchmarkMethodLabel(method: string | null | undefined, fallback: string) {
+  if (!method) return fallback;
   return method.replace(/_/g, " ");
 }
 
@@ -59,13 +70,14 @@ export function PortfolioAttributionSummary({
   holdingStartDate,
   attributionAsOfDate,
 }: PortfolioAttributionSummaryProps) {
+  const t = useT();
   return (
     <>
       <section className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
           <p className="type-small text-[var(--ink-muted)]">
             <InfoTooltip
-              label="Portfolio Return"
+              label={t("portfolio.attributionSummary.kpi.portfolioReturn")}
               description={`Definition: total weighted return earned by the selected holdings over the attribution period. Formula: Portfolio Return = sum(weight_i x holding return_i). Step 1: calculate each holding's period return from its start and end prices. Step 2: multiply each holding return by its portfolio weight. Step 3: sum the weighted holding returns. Current status: ${portfolioStatus("return", attributionData.totals.portfolio_return)}.`}
             />
           </p>
@@ -76,7 +88,7 @@ export function PortfolioAttributionSummary({
         <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
           <p className="type-small text-[var(--ink-muted)]">
             <InfoTooltip
-              label="Benchmark Return"
+              label={t("portfolio.attributionSummary.kpi.benchmarkReturn")}
               description="Definition: return of the benchmark used as the comparison hurdle for the portfolio. Formula: Benchmark Return = sum(benchmark weight_i x benchmark/sector return_i), or direct benchmark index return when constituent weights are available. Step 1: identify the benchmark and period. Step 2: use direct benchmark returns or mapped proxy sector returns. Step 3: aggregate benchmark-weighted returns into one comparison return."
             />
           </p>
@@ -87,7 +99,7 @@ export function PortfolioAttributionSummary({
         <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
           <p className="type-small text-[var(--ink-muted)]">
             <InfoTooltip
-              label="Active Return"
+              label={t("portfolio.attributionSummary.kpi.activeReturn")}
               description={`Definition: excess return produced by the portfolio versus the benchmark. Formula: Active Return = Portfolio Return - Benchmark Return. Step 1: compute the portfolio weighted return. Step 2: compute the benchmark return over the same period and currency. Step 3: subtract benchmark return from portfolio return; positive means outperformance and negative means underperformance. Current status: ${portfolioStatus("active", attributionData.active_return)}.`}
             />
           </p>
@@ -98,7 +110,7 @@ export function PortfolioAttributionSummary({
         <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
           <p className="type-small text-[var(--ink-muted)]">
             <InfoTooltip
-              label="Beta"
+              label={t("portfolio.attributionSummary.kpi.beta")}
               description={`Definition: sensitivity of portfolio returns to benchmark returns. Formula: Beta = covariance(portfolio returns, benchmark returns) / variance(benchmark returns). Step 1: align portfolio and benchmark return observations over the same dates. Step 2: measure how the portfolio co-moves with the benchmark. Step 3: divide that co-movement by benchmark variance. Around 1.0 is market-like; above 1.2 is higher benchmark sensitivity. Current status: ${portfolioStatus("beta", attributionData.risk_metrics.beta)}.`}
             />
           </p>
@@ -113,7 +125,7 @@ export function PortfolioAttributionSummary({
           <div className="max-w-3xl">
             <h2 className="type-panel-title text-[var(--ink)]">
               <InfoTooltip
-                label="Benchmark Selection Criteria"
+                label={t("portfolio.attributionSummary.benchmarkCriteria")}
                 description="The current portfolio view selects ^GSPC as the broad-market benchmark because the watchlist is modeled as a diversified equity basket and the S&P 500 offers market-cap-weighted US large-cap breadth. Sector matching is handled through attribution sectors and an explicit proxy when true benchmark constituent weights are unavailable."
               />
             </h2>
@@ -126,15 +138,15 @@ export function PortfolioAttributionSummary({
           </div>
           <div className="grid min-w-56 grid-cols-2 gap-2 type-small">
             <div className="bg-[var(--surface)] p-3">
-              <div className="text-[var(--ink-muted)]">Weight Source</div>
+              <div className="text-[var(--ink-muted)]">{t("portfolio.attributionSummary.weightSource")}</div>
               <div className="type-mono mt-1 text-[var(--ink)]">
                 {attributionData.metadata.benchmark_weights_source.replace("_", " ")}
               </div>
             </div>
             <div className="bg-[var(--surface)] p-3">
-              <div className="text-[var(--ink-muted)]">Proxy Method</div>
+              <div className="text-[var(--ink-muted)]">{t("portfolio.attributionSummary.proxyMethod")}</div>
               <div className="type-figure-md mt-1 text-[var(--ink)]">
-                {benchmarkMethodLabel(attributionData.metadata.data_quality?.benchmark_proxy_method)}
+                {benchmarkMethodLabel(attributionData.metadata.data_quality?.benchmark_proxy_method, t("portfolio.attributionSummary.directBenchmark"))}
               </div>
             </div>
           </div>

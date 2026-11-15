@@ -3,6 +3,7 @@
 import { BilingualLabel } from "@/components/ui/BilingualLabel";
 import { formatNumber } from "@/lib/format";
 import React from "react";
+import { useT } from "@/lib/i18n/locale";
 // The type, not a copy of it: a clone had to be kept structurally identical to ../page by
 // hand, and nothing would have failed if it drifted. `import type` is erased at compile
 // time, so importing from the route module adds no runtime cycle -- StockTile does the same.
@@ -73,25 +74,26 @@ export function PortfolioAllocationEditor({
   metricToneClass,
   watchlist,
 }: PortfolioAllocationEditorProps) {
+  const t = useT();
   return (
     <>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="type-panel-title text-[var(--ink)]">Portfolio Table</h3>
+          <h3 className="type-panel-title text-[var(--ink)]">{t("portfolio.allocation.title")}</h3>
           <p className="mt-1 type-body text-[var(--ink-muted)]">
-            Drag the slider for quick weight changes or double-click the Allocation value for exact manual input. Allocation and investment-amount changes save automatically, and watchlist removal stays in the holdings area instead of this table.
+            {t("portfolio.allocation.help")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <label className="inline-flex items-center gap-2 rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-small text-[var(--ink-muted)]">
-            Total Investment
+            {t("portfolio.allocation.totalInvestment")}
             <input
               type="number"
               min="0"
               step="100"
               value={totalInvestmentInput}
               onChange={(event) => setTotalInvestmentInput(event.target.value)}
-              aria-label="Total investment amount"
+              aria-label={t("portfolio.allocation.totalInvestmentAria")}
               className="w-32 rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-2 py-1 text-right type-small text-[var(--ink)]"
             />
           </label>
@@ -100,10 +102,10 @@ export function PortfolioAllocationEditor({
               type="checkbox"
               checked={applyAllocationToSnapshot}
               onChange={(event) => setApplyAllocationToSnapshot(event.target.checked)}
-              aria-label="Apply allocation changes to snapshot"
+              aria-label={t("portfolio.allocation.applyAria")}
               className="h-6 w-6 shrink-0"
             />
-            Apply To Snapshot
+            {t("portfolio.allocation.applyToSnapshot")}
           </label>
           <button
             type="button"
@@ -111,38 +113,38 @@ export function PortfolioAllocationEditor({
             disabled={savingAllocationTickers.length > 0 || !usingStoredWeights || totalStoredWeight <= 0}
             className="inline-flex items-center justify-center rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 type-small text-[var(--ink-muted)] hover:text-[var(--ink)] disabled:opacity-50"
           >
-            Normalize To 100%
+            {t("portfolio.allocation.normalize")}
           </button>
         </div>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
         <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-3 type-body text-[var(--ink-muted)]">
-          Draft total: {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="type-mono font-semibold text-[var(--ink)]">{formatNumber(totalDraftWeightPercent / 100, "percent", { digits: 1 })}</span>
+          {t("portfolio.allocation.draftTotal")}: {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="type-mono font-semibold text-[var(--ink)]">{formatNumber(totalDraftWeightPercent / 100, "percent", { digits: 1 })}</span>
         </div>
         <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-3 type-body text-[var(--ink-muted)]">
-          Projected net value: {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">{formatCurrencyCompact(allocationSummary.netProjectedValue)}</span>
+          {t("portfolio.allocation.projectedNetValue")}: {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">{formatCurrencyCompact(allocationSummary.netProjectedValue)}</span>
         </div>
         <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-3 type-body text-[var(--ink-muted)]">
-          Transaction fee reserve: {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">{formatCurrencyCompact(allocationSummary.transactionFeeAmount)}</span>
+          {t("portfolio.allocation.feeReserve")}: {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">{formatCurrencyCompact(allocationSummary.transactionFeeAmount)}</span>
         </div>
         <div className="border border-[var(--line)] bg-[var(--surface-raised)] p-3 type-body text-[var(--ink-muted)]">
-          Auto-save status: {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">{savingAllocationTickers.length > 0 || savingTotalInvestment ? "Saving..." : "Synced"}</span>
+          {t("portfolio.allocation.autoSave")}: {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">{savingAllocationTickers.length > 0 || savingTotalInvestment ? t("portfolio.allocation.saving") : t("portfolio.allocation.synced")}</span>
         </div>
       </div>
 
       {draftWeightsOverflow && (
         <div className="mt-4 border border-[var(--status-warning-border)] bg-[var(--status-warning-surface)] px-4 py-3 type-body text-[var(--status-warning-ink)]">
-          Warning: draft allocation totals currently sum to {formatNumber(totalDraftWeightPercent / 100, "percent", { digits: 1 })}. You can keep editing, but attribution will stay paused until saved weights are 100.0% or below.
+          {t("portfolio.allocation.overflow", { total: formatNumber(totalDraftWeightPercent / 100, "percent", { digits: 1 }) })}
         </div>
       )}
 
       <p className="mt-3 type-small text-[var(--ink-muted)]">
-        `Final Profit` uses the current DCF value vs price (a one-off gap, not a rate) for each stock and subtracts a `0.2%` transaction fee from the projected exit value. `Apply To Snapshot` keeps auto-saved allocation changes tied to today&apos;s saved comparison snapshot only when you opt in.
+        {t("portfolio.allocation.noteFinalProfit")}
       </p>
 
       <div
-        aria-label="Portfolio table scroll region"
+        aria-label={t("portfolio.allocation.tableScrollAria")}
         className="mt-4 max-h-[min(60vh,36rem)] overflow-auto border border-[var(--line)] bg-[var(--surface-raised)]"
       >
         <table className="w-full min-w-[1120px] type-body">
@@ -187,7 +189,7 @@ export function PortfolioAllocationEditor({
                       {formatNumber(row.allocationPercent / 100, "percent", { digits: 1 })}
                     </button>
                   )}
-                  {row.isSaving && <div className="type-caption text-[var(--ink-muted)]">Saving...</div>}
+                  {row.isSaving && <div className="type-caption text-[var(--ink-muted)]">{t("portfolio.allocation.saving")}</div>}
                 </td>
                 <td className="px-4 py-3">
                   <input
@@ -197,7 +199,7 @@ export function PortfolioAllocationEditor({
                     step="0.1"
                     value={weightDrafts[row.stock.ticker] ?? row.allocationPercent.toFixed(1)}
                     onChange={(event) => handleAllocationDraftChange(row.stock, event.target.value)}
-                    aria-label={`${row.stock.ticker} allocation slider`}
+                    aria-label={t("portfolio.allocation.sliderAria", { ticker: row.stock.ticker })}
                     className="h-6 w-full accent-[var(--brand)]"
                   />
                 </td>
@@ -211,7 +213,7 @@ export function PortfolioAllocationEditor({
             {watchlist.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-4 py-6 text-center type-body text-[var(--ink-muted)]">
-                  Add a stock from the search panel to start building the portfolio table.
+                  {t("portfolio.allocation.empty")}
                 </td>
               </tr>
             )}

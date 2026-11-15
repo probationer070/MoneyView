@@ -99,3 +99,23 @@ test("the stock detail modal opened from a tile is Korean", async ({ page }) => 
   await expect(dialog.getByRole("button", { name: "Review Portfolio Weight", exact: true })).toHaveCount(0);
   await expect(dialog.getByText("Snapshot Context", { exact: true })).toHaveCount(0);
 });
+
+test("the Weights tab's search heading and normalize button are Korean", async ({ page }) => {
+  await gotoPortfolioKo(page);
+
+  await page.getByRole("tab", { name: "비중" }).click();
+  await expect(page.getByRole("heading", { name: "종목 검색 패널", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "100%로 정규화", exact: true })).toBeVisible();
+
+  await expect(page.getByRole("heading", { name: "Stock Search Panel", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Normalize To 100%", exact: true })).toHaveCount(0);
+});
+
+test("the Attribution tab's KPI labels are Korean once the analysis runs", async ({ page }) => {
+  await gotoPortfolioKo(page);
+
+  await page.getByRole("tab", { name: "성과 기여" }).click();
+  await page.getByRole("button", { name: "분석 새로고침" }).click();
+  await expect(page.getByText("포트폴리오 수익률", { exact: true })).toBeVisible();
+  await expect(page.getByText("Portfolio Return", { exact: true })).toHaveCount(0);
+});

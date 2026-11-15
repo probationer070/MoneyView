@@ -3,6 +3,7 @@
 import { type FormEvent } from "react";
 import { Plus, RefreshCw } from "lucide-react";
 import { StockSearchAdd } from "./StockSearchAdd";
+import { useT } from "@/lib/i18n/locale";
 
 interface BrowserCompany {
   ticker: string;
@@ -81,17 +82,18 @@ export function PortfolioCommandCenter({
   formatSyncTimestamp,
   formatSectorLabel,
 }: PortfolioCommandCenterProps) {
+  const t = useT();
   return (
     <section className="border border-[var(--line)] bg-[var(--surface-raised)] p-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="type-panel-title text-[var(--ink)]">Stock Search Panel</h3>
+          <h3 className="type-panel-title text-[var(--ink)]">{t("portfolio.weights.search.title")}</h3>
           <p className="mt-1 type-body text-[var(--ink-muted)]">
-            Search the saved company registry and watchlist-backed company set. You can open stock detail from here even when a ticker is not currently in the Portfolio Table.
+            {t("portfolio.weights.search.body")}
           </p>
         </div>
         <span className="rounded-[var(--radius-2)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-1 type-small text-[var(--ink-muted)]">
-          {browserSearchResults.length} result{browserSearchResults.length === 1 ? "" : "s"}
+          {browserSearchResults.length === 1 ? t("portfolio.weights.search.oneResult", { count: browserSearchResults.length }) : t("portfolio.weights.search.manyResults", { count: browserSearchResults.length })}
         </span>
       </div>
 
@@ -105,26 +107,26 @@ export function PortfolioCommandCenter({
         onOpenDetail={onOpenCompanyDetail}
         formatSectorLabel={formatSectorLabel}
         labels={{
-          search: "Search",
-          placeholder: "Search ticker, name, or sector",
-          ariaLabel: "Stock browser search",
-          add: "+ Add",
-          added: "Added",
-          openDetail: "Open Detail",
-          empty: "No matching stocks found in the current company registry. Use the manual add form below for a custom ticker.",
+          search: t("portfolio.weights.search.label"),
+          placeholder: t("portfolio.weights.search.placeholder"),
+          ariaLabel: t("portfolio.weights.search.ariaLabel"),
+          add: t("portfolio.weights.search.add"),
+          added: t("portfolio.weights.search.added"),
+          openDetail: t("portfolio.weights.search.openDetail"),
+          empty: t("portfolio.weights.search.empty"),
         }}
       />
 
       <div className="mt-5 border-t border-[var(--line)] pt-4">
         <div className="flex flex-col gap-2">
-          <h4 className="type-panel-title text-[var(--ink)]">Manual Add</h4>
+          <h4 className="type-panel-title text-[var(--ink)]">{t("portfolio.weights.manual.title")}</h4>
           <p className="type-body text-[var(--ink-muted)]">
-            Use manual add when the stock browser does not include the ticker you want. Saving preserves any existing weight when {/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">Add to Watchlist only</span> stays on.
+            {t("portfolio.weights.manual.body1")}{/* M2: inline emphasis inside a sentence; the weight separates the label from the text */}<span className="font-semibold text-[var(--ink)]">{t("portfolio.weights.manual.watchlistOnly")}</span>{t("portfolio.weights.manual.bodyEnd")}
           </p>
         </div>
         <form onSubmit={onAddHolding} className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
           <label className="flex flex-col gap-1 type-small text-[var(--ink-muted)]">
-            Ticker
+            {t("portfolio.weights.manual.ticker")}
             <input
               type="text"
               value={newTicker}
@@ -134,7 +136,7 @@ export function PortfolioCommandCenter({
             />
           </label>
           <label className="flex flex-col gap-1 type-small text-[var(--ink-muted)]">
-            Name
+            {t("portfolio.weights.manual.name")}
             <input
               type="text"
               value={newName}
@@ -144,7 +146,7 @@ export function PortfolioCommandCenter({
             />
           </label>
           <label className="flex flex-col gap-1 type-small text-[var(--ink-muted)]">
-            Sector
+            {t("portfolio.weights.manual.sector")}
             <input
               type="text"
               value={newSector}
@@ -154,7 +156,7 @@ export function PortfolioCommandCenter({
             />
           </label>
           <label className={`flex flex-col gap-1 type-small text-[var(--ink-muted)] ${addToWatchlistOnly ? "opacity-60" : ""}`}>
-            Initial Allocation %
+            {t("portfolio.weights.manual.initialAllocation")}
             <input
               type="number"
               min="0"
@@ -164,7 +166,7 @@ export function PortfolioCommandCenter({
               onChange={(event) => setNewWeightPercent(event.target.value)}
               placeholder={addToWatchlistOnly ? "0.0" : "25.0"}
               disabled={addToWatchlistOnly}
-              aria-label="Initial allocation percent"
+              aria-label={t("portfolio.weights.manual.initialAllocationAria")}
               className="rounded-[var(--radius-1)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 type-body text-[var(--ink)] disabled:cursor-not-allowed disabled:bg-[var(--surface)]"
             />
           </label>
@@ -174,13 +176,13 @@ export function PortfolioCommandCenter({
                 type="checkbox"
                 checked={addToWatchlistOnly}
                 onChange={(event) => setAddToWatchlistOnly(event.target.checked)}
-                aria-label="Add to Watchlist only"
+                aria-label={t("portfolio.weights.manual.watchlistOnly")}
                 className="mt-0.5 h-6 w-6 shrink-0"
               />
               <span>
-                Add to Watchlist only
+                {t("portfolio.weights.manual.watchlistOnly")}
                 <span className="mt-1 block type-caption text-[var(--ink-muted)]">
-                  Default keeps this name tracked at 0.0% until you opt into the portfolio model.
+                  {t("portfolio.weights.manual.watchlistOnlyHelp")}
                 </span>
               </span>
             </label>
@@ -190,13 +192,13 @@ export function PortfolioCommandCenter({
               className="inline-flex items-center justify-center gap-2 rounded-[var(--radius-1)] bg-[var(--brand)] px-4 py-2 type-body text-[var(--on-brand)] disabled:opacity-50"
             >
               <Plus className="h-4 w-4" />
-              {addingWatchlist ? "Saving..." : "Save Manual Ticker"}
+              {addingWatchlist ? t("portfolio.weights.manual.saving") : t("portfolio.weights.manual.save")}
             </button>
           </div>
         </form>
         {existingTicker && (
           <div className="mt-3 inline-flex items-center rounded-[var(--radius-2)] border border-[var(--status-success-border)] bg-[var(--status-success-surface)] px-3 py-1 type-small text-[var(--status-success-ink)]">
-            Already in Watchlist
+            {t("portfolio.weights.manual.existing")}
           </div>
         )}
       </div>
@@ -210,7 +212,7 @@ export function PortfolioCommandCenter({
             className="inline-flex items-center justify-center gap-2 rounded-[var(--radius-1)] border border-[var(--line)] px-3 py-2 type-small text-[var(--ink-muted)] hover:text-[var(--ink)] disabled:opacity-50"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${exportingWatchlist ? "animate-spin" : ""}`} />
-            {exportingWatchlist ? "Exporting..." : "Export Watchlist To JSON"}
+            {exportingWatchlist ? t("portfolio.weights.json.exporting") : t("portfolio.weights.json.exportAction")}
           </button>
           {importUnavailableReason === null && (
             <button
@@ -220,7 +222,7 @@ export function PortfolioCommandCenter({
               className="inline-flex items-center justify-center gap-2 rounded-[var(--radius-1)] border border-[var(--status-warning-border)] bg-[var(--status-warning-surface)] px-3 py-2 type-small text-[var(--status-warning-ink)] hover:bg-[var(--status-warning-surface)] disabled:opacity-50"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${importingJson ? "animate-spin" : ""}`} />
-              {importingJson ? "Importing..." : "Import JSON Into DB"}
+              {importingJson ? t("portfolio.weights.json.importing") : t("portfolio.weights.json.importAction")}
             </button>
           )}
         </div>
@@ -230,21 +232,21 @@ export function PortfolioCommandCenter({
               type="checkbox"
               checked={importJsonArmed}
               onChange={(event) => setImportJsonArmed(event.target.checked)}
-              aria-label="Arm destructive JSON import"
+              aria-label={t("portfolio.weights.json.armAria")}
               className="mt-0.5 h-6 w-6 shrink-0"
             />
-            <span>I understand Import JSON replaces the DB watchlist from file and can overwrite saved weights.</span>
+            <span>{t("portfolio.weights.json.armLabel")}</span>
           </label>
         ) : (
           <p className="mt-3 type-small text-[var(--ink-muted)]">{importUnavailableReason}</p>
         )}
         <p className="mt-3 type-body text-[var(--ink-muted)]">
-          Export writes the current DB-backed watchlist, including weights, into data/exports/watchlist-export.json (git-ignored, personal). Import replaces the watchlist from the committed starter seed and is intentionally destructive.
+          {t("portfolio.weights.json.help")}
         </p>
         <div className="mt-3 bg-[var(--surface-raised)] p-3 type-body text-[var(--ink-muted)]">
-          <div>Last sync/import source: {syncStatus?.source || "None recorded"}</div>
-          <div>Last sync/import time: {formatSyncTimestamp(syncStatus?.last_updated_at ?? "")}</div>
-          <div>JSON path: {syncStatus?.json_path || "Loading..."}</div>
+          <div>{t("portfolio.weights.json.syncSource")} {syncStatus?.source || t("portfolio.weights.json.noneRecorded")}</div>
+          <div>{t("portfolio.weights.json.syncTime")} {formatSyncTimestamp(syncStatus?.last_updated_at ?? "")}</div>
+          <div>{t("portfolio.weights.json.jsonPath")} {syncStatus?.json_path || t("portfolio.weights.json.loading")}</div>
         </div>
       </div>
     </section>
