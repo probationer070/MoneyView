@@ -88,8 +88,8 @@ export function TopNav() {
                   aria-current={isActive ? "page" : undefined}
                   onClick={close}
                   className={clsx(
-                    "group flex h-8 items-center rounded-[var(--radius-1)] px-2 text-[var(--ink)] hover:bg-[var(--surface-raised)]",
-                    isActive && "bg-[var(--surface-raised)] shadow-[inset_0_-2px_0_var(--brand)]",
+                    "group flex h-8 items-center rounded-[var(--radius-1)] border-b-2 px-2 text-[var(--ink)] hover:bg-[var(--surface-raised)]",
+                    isActive ? "border-[var(--brand)] bg-[var(--surface-raised)]" : "border-transparent",
                   )}
                 >
                   <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />

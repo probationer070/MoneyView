@@ -42,7 +42,7 @@ test.describe("the top bar at 1280x720", () => {
     const current = primary(page).getByRole("link", { name: "Valuation" });
     await expect(current).toHaveText("Valuation");
     await expect(current).toHaveAttribute("aria-current", "page");
-    // D1: the current page also carries a 2px brand underline.
+    // D1: the current page also carries a 2px brand underline, drawn as a bottom border (not a shadow).
     const brand = await page.evaluate(() => {
       const probe = document.createElement("span");
       probe.style.color = "var(--brand)";
@@ -51,7 +51,9 @@ test.describe("the top bar at 1280x720", () => {
       probe.remove();
       return colour;
     });
-    expect(await current.evaluate((el) => getComputedStyle(el).boxShadow)).toContain(brand);
+    await expect(current).toHaveCSS("border-bottom-width", "2px");
+    expect(await current.evaluate((el) => getComputedStyle(el).borderBottomColor)).toBe(brand);
+    expect(await current.evaluate((el) => getComputedStyle(el).boxShadow)).toBe("none");
     const other = primary(page).getByRole("link", { name: "Portfolio" });
     await expect(labelOf(other)).toHaveCSS("max-width", "0px");
     await expect(other).toHaveAttribute("title", "Portfolio");
