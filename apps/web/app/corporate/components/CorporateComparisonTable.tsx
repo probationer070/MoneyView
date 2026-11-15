@@ -100,7 +100,7 @@ export function CorporateComparisonTable({
                     onClick={() => onOpenCalculationForTicker(row.ticker, "backendFairValue")}
                     disabled={row.group_name === "benchmark"}
                     title={row.dcf_refusal
-                      ? impliedReturnRefusalText(row.dcf_refusal)
+                      ? impliedReturnRefusalText(row.dcf_refusal, "en", t)
                       : bridged === null ? "The equity bridge did not resolve for this ticker, so no intrinsic value per share is available." : undefined}
                     className={`type-mono tabular-nums text-[var(--ink)] ${row.group_name === "benchmark" ? "cursor-default" : "underline decoration-dotted underline-offset-4 hover:opacity-80"}`}
                   >
@@ -113,7 +113,7 @@ export function CorporateComparisonTable({
                     type="button"
                     onClick={() => onOpenCalculationForTicker(row.ticker, "backendDcf")}
                     disabled={row.group_name === "benchmark"}
-                    title={row.dcf_refusal ? impliedReturnRefusalText(row.dcf_refusal) : undefined}
+                    title={row.dcf_refusal ? impliedReturnRefusalText(row.dcf_refusal, "en", t) : undefined}
                     className={`type-mono tabular-nums text-[var(--ink)] ${row.group_name === "benchmark" ? "cursor-default" : "underline decoration-dotted underline-offset-4 hover:opacity-80"}`}
                   >
                     {row.dcf_implied_return === null ? "—" : formatPct2(row.dcf_implied_return)}
@@ -124,12 +124,12 @@ export function CorporateComparisonTable({
                 {/* Annual rates on the same capital as WACC (spec 2026-09-26-implied-return-spread).
                     A null is a refusal or a pre-v3 snapshot; the title says which. Plain text:
                     there is no calculation detail of its own to link to. */}
-                <td className="type-mono px-4 py-3 text-right tabular-nums" title={row.market_implied_return === null ? impliedReturnRefusalText(row.implied_return_refusal) : undefined}>
+                <td className="type-mono px-4 py-3 text-right tabular-nums" title={row.market_implied_return === null ? impliedReturnRefusalText(row.implied_return_refusal, "en", t) : undefined}>
                   {row.market_implied_return === null ? "—" : formatPct2(row.market_implied_return)}
                 </td>
                 <td
                   data-testid={`implied-return-spread-${row.ticker}`}
-                  title={row.implied_return_spread === null ? impliedReturnRefusalText(row.implied_return_refusal) : undefined}
+                  title={row.implied_return_spread === null ? impliedReturnRefusalText(row.implied_return_refusal, "en", t) : undefined}
                   className={`type-mono px-4 py-3 text-right tabular-nums ${row.implied_return_spread === null ? "text-[var(--ink-muted)]" : row.implied_return_spread >= 0 ? "text-[var(--up)]" : "text-[var(--down)]"}`}
                 >
                   {row.implied_return_spread === null ? "—" : formatPct2(row.implied_return_spread)}

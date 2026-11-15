@@ -240,7 +240,7 @@ export function StockDetailModal({
   const sparklineTrendPct = summarizeSparklineTrend(stock.sparkline);
   
   const snapshotContextLabel = snapshotMeta?.mode === "snapshot"
-    ? t("portfolio.detail.context.savedFrom", { date: formatDateLabel(snapshotMeta.as_of_date) })
+    ? t("portfolio.detail.context.savedFrom", { date: formatDateLabel(snapshotMeta.as_of_date, t) })
     : t("portfolio.detail.context.liveMetrics");
     
   const snapshotTrendPoints = useMemo(
@@ -277,13 +277,13 @@ export function StockDetailModal({
         }),
         dcfUpside: buildPortfolioDisplayMetric(point.dcf_implied_return, {
           missingReason: point.dcf_refusal
-            ? impliedReturnRefusalText(point.dcf_refusal)
+            ? impliedReturnRefusalText(point.dcf_refusal, "en", t)
             : t("portfolio.detail.metric.missingDcf"),
           suspiciousReason: t("portfolio.detail.metric.suspiciousDcf"),
         }),
         impliedVsWacc: buildPortfolioDisplayMetric(point.implied_return_spread, {
           // A code means refused in a v3 snapshot; no code means the snapshot predates v3.
-          missingReason: impliedReturnRefusalText(point.implied_return_refusal),
+          missingReason: impliedReturnRefusalText(point.implied_return_refusal, "en", t),
           suspiciousReason: t("portfolio.detail.metric.suspiciousImpliedWacc"),
         }),
       };
@@ -307,7 +307,7 @@ export function StockDetailModal({
               const metrics = snapshotTimelineMetrics[point.snapshot_version];
               return {
               id: point.snapshot_version,
-              title: formatDateLabel(point.as_of_date),
+              title: formatDateLabel(point.as_of_date, t),
               subtitle: t("portfolio.detail.timeline.against", { source: point.snapshot_source, benchmark: point.benchmark_ticker }),
               active: point.snapshot_version === activeSnapshotVersion,
               meta: (
@@ -647,10 +647,10 @@ export function StockDetailModal({
                 {metricAuditQuery.data ? <MetricQualityBadge quality={metricAuditQuery.data.spread.quality} /> : null}
               </div>
               <div className={`mt-2 type-figure-md tabular-nums ${metricToneClass(comparisonMetrics.roicMinusWacc)}`} title={metricDisplayTitle(comparisonMetrics.roicMinusWacc)}>
-                {metricAuditQuery.data ? formatAuditMetricValue(metricAuditQuery.data.spread) : comparisonMetrics.roicMinusWacc.displayValue}
+                {metricAuditQuery.data ? formatAuditMetricValue(metricAuditQuery.data.spread, t) : comparisonMetrics.roicMinusWacc.displayValue}
               </div>
               <p className="mt-2 type-small text-[var(--ink-muted)]">
-                {metricAuditQuery.data ? metricAuditReason(metricAuditQuery.data.spread) : metricSubtitle(comparisonMetrics.roicMinusWacc) ?? t("portfolio.detail.metric.roicWaccHelp")}
+                {metricAuditQuery.data ? metricAuditReason(metricAuditQuery.data.spread, t) : metricSubtitle(comparisonMetrics.roicMinusWacc) ?? t("portfolio.detail.metric.roicWaccHelp")}
               </p>
             </div>
             <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
@@ -701,7 +701,7 @@ export function StockDetailModal({
               <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
                 <div className="text-[var(--ink-muted)]">{t("portfolio.detail.context.asOf")}</div>
                 <div className="type-mono mt-1 text-[var(--ink)]">
-                  {snapshotMeta ? formatDateLabel(snapshotMeta.as_of_date) : t("portfolio.detail.context.liveValue")}
+                  {snapshotMeta ? formatDateLabel(snapshotMeta.as_of_date, t) : t("portfolio.detail.context.liveValue")}
                 </div>
               </div>
               <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
@@ -712,8 +712,8 @@ export function StockDetailModal({
               </div>
               <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
                 <div className="text-[var(--ink-muted)]">{t("portfolio.detail.context.universe")}</div>
-                <div className="type-mono mt-1 overflow-inline-ellipsis text-[var(--ink)]" title={portfolioComparisonUniverseLabel(effectiveComparisonUniverse)}>
-                  {portfolioComparisonUniverseLabel(effectiveComparisonUniverse)}
+                <div className="type-mono mt-1 overflow-inline-ellipsis text-[var(--ink)]" title={portfolioComparisonUniverseLabel(effectiveComparisonUniverse, t)}>
+                  {portfolioComparisonUniverseLabel(effectiveComparisonUniverse, t)}
                 </div>
               </div>
               <div className="border border-[var(--line)] bg-[var(--surface)] p-3 type-small">
@@ -760,7 +760,7 @@ export function StockDetailModal({
               </p>
               {snapshotMeta?.mode === "snapshot" && (
                 <p className="type-small text-[var(--ink-muted)]">
-                  {t("portfolio.detail.timeline.context", { date: formatDateLabel(snapshotMeta.as_of_date), universe: portfolioComparisonUniverseLabel(effectiveComparisonUniverse), benchmark: effectiveComparisonBenchmarkTicker })}
+                  {t("portfolio.detail.timeline.context", { date: formatDateLabel(snapshotMeta.as_of_date, t), universe: portfolioComparisonUniverseLabel(effectiveComparisonUniverse, t), benchmark: effectiveComparisonBenchmarkTicker })}
                 </p>
               )}
             </div>

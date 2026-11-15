@@ -1,4 +1,5 @@
 import type { CorporateMetricAuditEntry, MetricQuality } from "../../../packages/shared-types";
+import { englishTr, type Tr } from "../app/cases/caseFields";
 
 export function metricQualityTone(quality: MetricQuality) {
   switch (quality) {
@@ -16,15 +17,15 @@ export function metricQualityTone(quality: MetricQuality) {
   }
 }
 
-export function formatAuditMetricValue(entry: CorporateMetricAuditEntry) {
+export function formatAuditMetricValue(entry: CorporateMetricAuditEntry, t: Tr = englishTr) {
   if (entry.quality === "invalid" || entry.quality === "missing") {
-    return "N/A";
+    return t("metricAudit.notAvailable");
   }
-  return entry.display_value || "N/A";
+  return entry.display_value || t("metricAudit.notAvailable");
 }
 
-export function metricAuditReason(entry: CorporateMetricAuditEntry) {
-  return entry.reason ?? entry.warnings[0] ?? "No additional audit note.";
+export function metricAuditReason(entry: CorporateMetricAuditEntry, t: Tr = englishTr) {
+  return entry.reason ?? entry.warnings[0] ?? t("metricAudit.noNote");
 }
 
 export function isDecisionGradeMetric(entry: CorporateMetricAuditEntry) {

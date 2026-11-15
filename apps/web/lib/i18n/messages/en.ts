@@ -17,8 +17,11 @@ export const en = {
     errorTitle: "Something went wrong", tryAgain: "Try again", noData: "No data available", noDataHint: "Run an analysis or refresh the data to see results here.", renderFailureTitle: "Component Render Failure", renderFailureBody: "An unexpected error broke the layout context for this graphic. Logs have been traced locally.", exportDisabled: "Export Disabled", export: "Export", exportJson: "Export JSON", exportCsv: "Export CSV", exportMarkdown: "Export Markdown", printPdf: "Print PDF", tickerPlaceholder: "Ticker or company name", other: "Other", chartUnavailable: "Chart unavailable",
   },
   delta: { up: "Up", down: "Down", flat: "Unchanged" },
+  impliedReturn: { notRecorded: "Not recorded before metric v3." },
   portfolio: {
     title: "Portfolio",
+    universe: { custom: "Custom Universe", portfolioBenchmark: "Portfolio + Benchmark" },
+    noDate: "N/A",
     tabs: { label: "Portfolio views", stocks: "Stocks", weights: "Weights" },
     addStock: { title: "Add stock", open: "+ Add stock", search: "Search", placeholder: "Search ticker, name, or sector", add: "+ Add", added: "Already added", empty: "No matching stocks in the company registry." },
     news: { never: "Refresh news", updated: "News updated {minutes} min ago", justNow: "News updated just now", summary: { nothing: "Nothing to refresh", refreshed: "{count} refreshed", current: "{count} already current", failed: "{count} failed ({tickers})", notRecognised: "{count} not recognised ({tickers})", qualified: "{summary} · for the stocks visible when you pressed Refresh", failedFallback: "Refresh failed" } },
@@ -2529,6 +2532,8 @@ export const en = {
     },
   },
   metricAudit: {
+    noNote: "No additional audit note.",
+    notAvailable: "N/A",
     unavailableTitle: "{title} audit unavailable",
     unavailableDescription: "Refresh or reopen the metric detail to load the calculation audit.",
     source: "Source:",

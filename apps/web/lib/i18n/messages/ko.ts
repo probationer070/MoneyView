@@ -20,8 +20,11 @@ export const ko: Messages = {
     errorTitle: "문제가 발생했습니다", tryAgain: "다시 시도", noData: "데이터가 없습니다", noDataHint: "분석을 실행하거나 데이터를 새로 고치면 결과가 여기에 표시됩니다.", renderFailureTitle: "화면 구성 요소 오류", renderFailureBody: "예기치 않은 오류로 이 그래프를 표시하지 못했습니다. 로그는 로컬에 기록되었습니다.", exportDisabled: "내보내기 사용 불가", export: "내보내기", exportJson: "JSON 내보내기", exportCsv: "CSV 내보내기", exportMarkdown: "Markdown 내보내기", printPdf: "PDF 인쇄", tickerPlaceholder: "종목 코드 또는 기업명", other: "기타", chartUnavailable: "차트를 표시할 수 없습니다",
   },
   delta: { up: "상승", down: "하락", flat: "보합" },
+  impliedReturn: { notRecorded: "메트릭 v3 이전에는 기록되지 않았습니다." },
   portfolio: {
     title: "포트폴리오",
+    universe: { custom: "사용자 지정 유니버스", portfolioBenchmark: "포트폴리오 + 벤치마크" },
+    noDate: "해당 없음",
     tabs: { label: "포트폴리오 보기", stocks: "종목", weights: "비중" },
     addStock: { title: "종목 추가", open: "+ 종목 추가", search: "검색", placeholder: "종목 코드, 이름 또는 업종 검색", add: "+ 추가", added: "이미 추가됨", empty: "기업 목록에서 일치하는 종목을 찾지 못했습니다." },
     news: { never: "뉴스 갱신", updated: "뉴스 {minutes}분 전 갱신", justNow: "뉴스 방금 갱신", summary: { nothing: "새로고침할 항목 없음", refreshed: "{count}개 갱신", current: "{count}개 이미 최신", failed: "{count}개 실패 ({tickers})", notRecognised: "{count}개 인식 못함 ({tickers})", qualified: "{summary} · 새로고침을 누른 시점에 보이던 종목 기준", failedFallback: "새로고침 실패" } },
@@ -2530,6 +2533,8 @@ export const ko: Messages = {
     },
   },
   metricAudit: {
+    noNote: "추가 감사 메모가 없습니다.",
+    notAvailable: "해당 없음",
     unavailableTitle: "{title} 감사 정보를 사용할 수 없습니다",
     unavailableDescription: "상세 화면을 새로 고치거나 다시 열어 계산 감사 내역을 불러오십시오.",
     source: "출처:",

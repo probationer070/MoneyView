@@ -1,6 +1,7 @@
 import { formatNumber } from "@/lib/format";
 import type { MetricQuality } from "../../../../packages/shared-types";
 import { impliedReturnRefusalText } from "@/lib/impliedReturn";
+import { englishTr, type Tr } from "@/app/cases/caseFields";
 import type {
   CorporateComparisonResponse,
   CorporateComparisonSnapshotMeta,
@@ -175,7 +176,9 @@ export function buildPortfolioTickerMetrics(args: {
   portfolioComparisonQueryHasData: boolean;
   activeSnapshotMeta: CorporateComparisonSnapshotMeta | null;
   estimateVolatilityFromSparkline: (sparkline: number[]) => number | null;
+  t?: Tr;
 }): Record<string, PortfolioTickerMetrics> {
+  const t = args.t ?? englishTr;
   const sourceMode = comparisonSourceMode({
     comparisonData: args.comparisonData,
     comparisonQueryHasData: args.portfolioComparisonQueryHasData,
@@ -217,7 +220,7 @@ export function buildPortfolioTickerMetrics(args: {
       dcfUpside: row
         ? buildNumericMetric(row.dcf_implied_return, {
           sourceMode,
-          missingReason: row.dcf_refusal ? impliedReturnRefusalText(row.dcf_refusal) : "Missing DCF output for this ticker.",
+          missingReason: row.dcf_refusal ? impliedReturnRefusalText(row.dcf_refusal, "en", t) : "Missing DCF output for this ticker.",
           suspiciousReason: "DCF value vs price falls outside the sanity range and is excluded from ranking.",
           stale,
         })
@@ -226,7 +229,7 @@ export function buildPortfolioTickerMetrics(args: {
         ? buildNumericMetric(row.implied_return_spread, {
           sourceMode,
           // Says why: a refusal code, or "not recorded before metric v3" when there is none.
-          missingReason: impliedReturnRefusalText(row.implied_return_refusal),
+          missingReason: impliedReturnRefusalText(row.implied_return_refusal, "en", t),
           suspiciousReason: "Implied return vs WACC falls outside the sanity range and is excluded from ranking.",
           stale,
         })

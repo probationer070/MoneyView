@@ -3,6 +3,7 @@
 import { BilingualLabel } from "@/components/ui/BilingualLabel";
 import { formatNumber } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/locale";
+import { englishTr, type Tr } from "@/app/cases/caseFields";
 import { LABELS } from "@/lib/i18n/labels";
 import { type FormEvent, type KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -566,16 +567,16 @@ function formatSyncTimestamp(value: string) {
   return parsed.toLocaleString();
 }
 
-export function formatDateLabel(value: string) {
-  if (!value) return "N/A";
+export function formatDateLabel(value: string, t: Tr = englishTr) {
+  if (!value) return t("portfolio.noDate");
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleDateString();
 }
 
-export function portfolioComparisonUniverseLabel(value: string) {
-  if (value === "custom") return "Custom Universe";
-  return "Portfolio + Benchmark";
+export function portfolioComparisonUniverseLabel(value: string, t: Tr = englishTr) {
+  if (value === "custom") return t("portfolio.universe.custom");
+  return t("portfolio.universe.portfolioBenchmark");
 }
 
 function isPortfolioComparisonSnapshotStale(
@@ -1048,10 +1049,12 @@ export default function PortfolioPage() {
     portfolioComparisonQueryHasData: Boolean(portfolioComparisonQuery.data),
     activeSnapshotMeta,
     estimateVolatilityFromSparkline,
+    t,
   }), [
     activeComparisonData,
     activeSnapshotMeta,
     comparisonData,
+    t,
     portfolioComparisonQuery.data,
     portfolioComparisonUniverse,
     watchlist,
@@ -1411,7 +1414,7 @@ export default function PortfolioPage() {
         const refreshed = await savePortfolioSnapshot();
         await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-summary"] });
         setPortfolioComparisonMode("snapshot");
-        setPortfolioComparisonMessage(t("portfolio.mutation.normalizedSnapshot", { date: formatDateLabel(refreshed.snapshot.as_of_date) }));
+        setPortfolioComparisonMessage(t("portfolio.mutation.normalizedSnapshot", { date: formatDateLabel(refreshed.snapshot.as_of_date, t) }));
       } catch (error) {
         setPortfolioComparisonMessage(error instanceof Error ? error.message : t("portfolio.mutation.normalizeSnapshotFailed"));
       }
@@ -1491,7 +1494,7 @@ export default function PortfolioPage() {
             await queryClient.invalidateQueries({ queryKey: ["portfolio-comparison-summary"] });
             setPortfolioComparisonMode("snapshot");
             setPortfolioComparisonMessage(
-              t("portfolio.mutation.savedAllocationSnapshot", { date: formatDateLabel(refreshed.snapshot.as_of_date) }),
+              t("portfolio.mutation.savedAllocationSnapshot", { date: formatDateLabel(refreshed.snapshot.as_of_date, t) }),
             );
           } catch (error) {
             setPortfolioComparisonMessage(error instanceof Error ? error.message : t("portfolio.mutation.savedAllocationSnapshotFailed"));

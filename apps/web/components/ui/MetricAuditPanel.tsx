@@ -80,10 +80,10 @@ export function MetricAuditPanel({
       </div>
       <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div className={`type-figure-md tabular-nums ${metricQualityTone(entry.quality)}`}>
-          {formatAuditMetricValue(entry)}
+          {formatAuditMetricValue(entry, t)}
         </div>
         {!isDecisionGradeMetric(entry) ? (
-          <div className="max-w-xl type-small text-[var(--ink-muted)]">{metricAuditReason(entry)}</div>
+          <div className="max-w-xl type-small text-[var(--ink-muted)]">{metricAuditReason(entry, t)}</div>
         ) : null}
       </div>
       {entry.warnings.length > 0 ? (
