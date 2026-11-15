@@ -11,9 +11,10 @@ from .stock import router as stock_router
 from .valuation import router as valuation_router
 from .decisions import router as decisions_router
 from .sync import router as sync_router
+from .market_assumptions import router as market_assumptions_router
 
 __all__ = [
     "market_router", "portfolio_router",
     "detail_router", "news_router", "corporate_router", "diagnostic_router", "dev_monitor_router", "report_router", "monte_carlo_router", "stock_router", "valuation_router",
-    "decisions_router", "sync_router",
+    "decisions_router", "sync_router", "market_assumptions_router",
 ]

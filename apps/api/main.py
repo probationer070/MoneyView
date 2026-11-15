@@ -33,6 +33,7 @@ from apps.api.routes import (
     dev_monitor_router,
     diagnostic_router,
     detail_router,
+    market_assumptions_router,
     market_router,
     monte_carlo_router,
     news_router,
@@ -268,6 +269,7 @@ app.include_router(monte_carlo_router, prefix="/api/v1/monte-carlo", tags=["Mont
 app.include_router(stock_router, prefix="/api/v1/stock", tags=["Stock"])
 app.include_router(valuation_router, prefix="/api/v1/valuation", tags=["Valuation"])
 app.include_router(decisions_router, prefix="/api/v1/decisions", tags=["Decisions"])
+app.include_router(market_assumptions_router, prefix="/api/v1/market-assumptions", tags=["Market assumptions"])
 app.include_router(sync_router, prefix="/api/v1/sync", tags=["Sync"])
 app.include_router(signals_router, prefix="/api/v1/signals", tags=["Signals"])
 app.include_router(risk_router, prefix="/api/v1/risk", tags=["Risk"])

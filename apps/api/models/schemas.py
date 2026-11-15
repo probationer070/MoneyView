@@ -115,6 +115,7 @@ from .schema_parts.watchlist import (
 )
 from .schema_parts.detail import DetailProfile, LatestMovers, MoverRow, ThemeLabel, ThemeRef
 from .schema_parts.sync import RecordsSyncStatus, SyncStatus
+from .schema_parts.market_assumptions import MarketAssumptionIn, MarketAssumptionRow, MarketAssumptionsView
 
 __all__ = [
     "DetailProfile",
