@@ -84,6 +84,12 @@ but check `docs/architecture/` first for the authoritative system description.
 | `moneyview-analysis-and-improvements.md` | Historical analysis and improvement notes |
 | `markdown-organization-design.md` | Design spec for this documentation reorganization |
 
+## Session Handoffs (`docs/superpowers/handoff/`)
+
+| File | Purpose |
+|---|---|
+| `2026-11-16-session-handoff.md` | State, owner-pending items, next work and working rules for the next session |
+
 ## Design Specs (`docs/superpowers/specs/`)
 
 Dated design specs produced by the brainstorming workflow, each covering one

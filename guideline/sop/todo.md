@@ -36,6 +36,8 @@ is deferred on data (see its entry).
 
 ---
 
+> **Continuing in a new session?** Start with the handoff: `docs/superpowers/handoff/2026-11-16-session-handoff.md`.
+
 ## Open work
 
 ### Track S: Macro signal engine
