@@ -66,6 +66,10 @@ class CaseNotFound(Exception):
     """No valuation case with the requested id."""
 
 
+class CaseHasForks(Exception):
+    """Other cases were forked from this one; deleting it would orphan them."""
+
+
 class DuplicateCaseName(ValueError):
     """A name collision, not a rejected model. Callers separate the two by
     type rather than by matching wording this module is free to change."""
@@ -266,6 +270,35 @@ def create_case(payload: dict) -> int:
 
         records_sync_store.stamp(conn, KIND_VALUATION_CASE, sync_uid, get_or_create_pc_id(conn))
     return case_id
+
+
+def delete_valuation_case(case_id: int) -> bool:
+    """Remove a case with its segments and narratives. False if there is no such id.
+
+    Raises CaseHasForks while another case's parent_case_id points at it. With records sync on,
+    the tombstone is written first, in the same transaction, so the other PC removes the case too
+    instead of sending it back. With sync off there are no tombstones (records-sync spec), the
+    same rule `investment_decision.delete_decision` follows.
+    """
+    from apps.api.services.records_sync.service import is_enabled as records_sync_enabled
+
+    with get_db() as conn:
+        row = conn.execute("SELECT sync_uid FROM valuation_case WHERE id = ?", (case_id,)).fetchone()
+        if row is None:
+            return False
+        forks = conn.execute("SELECT COUNT(*) FROM valuation_case WHERE parent_case_id = ?", (case_id,)).fetchone()[0]
+        if forks:
+            raise CaseHasForks(f"case {case_id} has {forks} fork(s); delete or re-parent them first")
+        if records_sync_enabled() and row["sync_uid"]:
+            records_sync_store.record_removal(conn, KIND_VALUATION_CASE, row["sync_uid"], get_or_create_pc_id(conn))
+        conn.execute(
+            "DELETE FROM segment_narrative WHERE segment_id IN (SELECT id FROM segment WHERE case_id = ?)",
+            (case_id,),
+        )
+        conn.execute("DELETE FROM segment WHERE case_id = ?", (case_id,))
+        conn.execute("DELETE FROM case_narrative WHERE case_id = ?", (case_id,))
+        conn.execute("DELETE FROM valuation_case WHERE id = ?", (case_id,))
+    return True
 
 
 def list_cases() -> list[dict]:

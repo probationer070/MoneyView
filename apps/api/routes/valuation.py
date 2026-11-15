@@ -27,9 +27,11 @@ from apps.api.services.company_baseline import (
 )
 from apps.api.services.records_sync import service as records_sync
 from apps.api.services.valuation_case import (
+    CaseHasForks,
     CaseNotFound,
     DuplicateCaseName,
     create_case,
+    delete_valuation_case,
     list_cases,
     load_case,
     run_stored_case,
@@ -65,6 +67,19 @@ def get_valuation_case(case_id: int):
         return APIResponse(data=load_case(case_id))
     except CaseNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.delete("/cases/{case_id}", response_model=APIResponse[dict])
+def delete_valuation_case_route(case_id: int):
+    """200 {deleted: true}; 404 unknown id; 409 while other cases are forked from it."""
+    try:
+        deleted = delete_valuation_case(case_id)
+    except CaseHasForks as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"no valuation case with id {case_id}")
+    records_sync.run_records_sync("mutation")
+    return APIResponse(data={"deleted": True})
 
 
 @router.post("/cases/{case_id}/run", response_model=APIResponse[dict])
